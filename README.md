@@ -2,18 +2,39 @@
 
 Business MIS application for the client onboarding register described in the source DOCX.
 
-## Run
+## Run locally
 
-Install and build the TypeScript frontend:
+From PowerShell, clone the project and enter its directory:
 
-```text
+```powershell
+git clone git@github.com:Naitik370/mofsl-client-onboarding.git
+cd mofsl-client-onboarding
+```
+
+Install the Python and TypeScript dependencies, build the browser bundle, and start the server:
+
+```powershell
 python -m pip install -r requirements.txt
 npm install
 npm run build
 npm start
 ```
 
-Open `http://127.0.0.1:4173`. FastAPI serves the API and the current TypeScript frontend.
+Open [http://127.0.0.1:4173/](http://127.0.0.1:4173/) in a browser. FastAPI serves both the JSON API and the TypeScript frontend. Keep the PowerShell window running while using the application; press `Ctrl+C` to stop it.
+
+For later runs, when dependencies and the frontend bundle are already available, only this command is required:
+
+```powershell
+npm start
+```
+
+## Load the demo data
+
+No separate import command is required. The committed `sql/onboarding.db` already contains 56 demonstration cases across the six workflow stages, queries, closures, holds, rejections, and cancellations. `npm start` opens this database automatically, and the MIS loads it after login.
+
+If the browser was already open, select **Refresh** or reload the page. New records entered through the application or API are saved directly to `sql/onboarding.db`.
+
+If the database file is removed, the next server start recreates the schema, master data, settings, holidays, and demo users, but the demonstration cases will no longer be present.
 
 ## Project structure
 
@@ -36,7 +57,15 @@ Open `http://127.0.0.1:4173`. FastAPI serves the API and the current TypeScript 
 - Multi-user login with PBKDF2 password hashing, server-side sessions, and HttpOnly cookies.
 - Role-based access for Admin, Operations, CSE, MOFSL, and Management Viewer.
 
-Run `npm test` for backend business-rule checks and `npm run check` for TypeScript validation.
+## Verify the application
+
+Run the complete project checks before committing changes:
+
+```powershell
+npm run check
+npm run build
+npm test
+```
 
 ## Demo users
 
