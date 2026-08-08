@@ -1,0 +1,14 @@
+{
+  "name": "mofsl-client-onboarding",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "start": "python backend/server.py",
+    "test": "python -m unittest discover -s backend -p \"test_*.py\" -v"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
