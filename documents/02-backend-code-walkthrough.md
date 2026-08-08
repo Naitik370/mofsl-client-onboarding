@@ -78,7 +78,7 @@ This is the application and persistence layer.
 
 ### Validation
 
-`validate()` checks required fields, master membership, controlled values, PAN format, ISO dates, date order, closure data, query details, channel-specific statuses, and Reference ID/entry-type consistency.
+The API generates a unique `MOFSL-YYYYMMDD-XXXXXXXX` Reference ID for each New case before `validate()` checks required fields, master membership, controlled values, PAN format, ISO dates, date order, closure data, query details, channel-specific statuses, and Reference ID/entry-type consistency.
 
 ### Persistence
 
@@ -98,4 +98,3 @@ This is the application and persistence layer.
 ## `backend/test_server.py`
 
 Tests use temporary SQLite databases. They cover authentication, permissions, validation, duplicates, manual/automatic dates, query-derived NRFT and hold time, PAN masking, holidays, related-entry history, and an HTTP end-to-end flow.
-

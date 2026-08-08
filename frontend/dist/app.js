@@ -6,6 +6,7 @@ let caseRows = [];
 let historyRows = [];
 let importRows = [];
 let editingId = null;
+let referenceLocked = false;
 let dimension = "cseName";
 let currentUser = null;
 const cseStatuses = new Set(["Request Received from CSE", "Resubmitted by CSE", "Discrepancy Resolution Received", "Resubmitted Form Received - Under Review"]);
@@ -271,9 +272,11 @@ function formPayload() {
 }
 function validateFrontEnd(payload, context = {}) {
     const errors = [];
-    const required = { referenceId: "Reference ID", requestId: "Request ID", clientName: "Client name", pan: "PAN No", inwardDate: "Inward date", status: "Latest status" };
+    const required = { requestId: "Request ID", clientName: "Client name", pan: "PAN No", inwardDate: "Inward date", status: "Latest status" };
     Object.entries(required).forEach(([key, label]) => { if (!payload[key]?.trim())
         errors.push(`${label} is required`); });
+    if (payload.entryType !== "New" && !payload.referenceId?.trim())
+        errors.push("Reference ID is required for related entries");
     if (payload.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(payload.pan))
         errors.push("PAN No must use the standard PAN format");
     if (!entryTypes.has(payload.entryType))
@@ -301,10 +304,6 @@ function validateFrontEnd(payload, context = {}) {
     if (payload.status === "Digital Form Sent to Client" && payload.channel !== "Digital")
         errors.push("Digital form submission requires the Digital channel");
     const reference = payload.referenceId?.trim().toLowerCase();
-    const ignored = context.ignoreReference?.trim().toLowerCase();
-    if (reference && reference !== ignored && payload.entryType === "New" && context.knownReferences?.has(reference)) {
-        errors.push("Reference ID already exists; use a resubmission, discrepancy resolution, or modification entry");
-    }
     if (reference && payload.entryType !== "New" && !context.knownReferences?.has(reference)) {
         errors.push("Create the original case before adding a related entry");
     }
@@ -315,12 +314,23 @@ function showFormErrors(errors) {
     box.hidden = errors.length === 0;
     box.innerHTML = errors.map(error => `<div>${escapeHtml(error)}</div>`).join("");
 }
+function syncReferenceField() {
+    const form = $("#case-form");
+    const reference = form.elements.namedItem("referenceId");
+    const isNew = form.elements.namedItem("entryType").value === "New";
+    reference.readOnly = referenceLocked || isNew;
+    reference.required = !isNew;
+    reference.placeholder = isNew ? "Generated when saved" : "Existing Reference ID";
+    if (isNew && !referenceLocked)
+        reference.value = "";
+}
 function resetForm() {
     const form = $("#case-form");
     form.reset();
-    form.elements.namedItem("referenceId").readOnly = false;
+    referenceLocked = false;
     $("#form-title").textContent = "New operational entry";
     editingId = null;
+    syncReferenceField();
     showFormErrors([]);
     if (currentUser?.role === "cse") {
         form.elements.namedItem("cseName").value = currentUser.displayName;
@@ -336,6 +346,7 @@ function editCase(id) {
         if (control)
             control.value = String(value ?? "");
     });
+    referenceLocked = true;
     form.elements.namedItem("referenceId").readOnly = true;
     if (currentUser && ["cse", "mofsl"].includes(currentUser.role)) {
         editingId = null;
@@ -347,16 +358,15 @@ function editCase(id) {
         editingId = id;
         $("#form-title").textContent = `Edit ${row.referenceId} / ${row.requestId}`;
     }
+    syncReferenceField();
     showView("entry");
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 async function saveForm(event) {
     event.preventDefault();
     const payload = applyAutomaticDates(formPayload());
-    const edited = editingId === null ? undefined : caseRows.find(row => Number(row.id) === editingId);
     const errors = validateFrontEnd(payload, {
         knownReferences: new Set(caseRows.map(row => String(row.referenceId).trim().toLowerCase())),
-        ignoreReference: edited ? String(edited.referenceId) : undefined,
     });
     showFormErrors(errors);
     if (errors.length)
@@ -365,14 +375,14 @@ async function saveForm(event) {
     const wasEditing = editingId !== null;
     button.disabled = true;
     try {
-        await api(editingId ? `/api/cases/${editingId}` : "/api/cases", {
+        const saved = await api(editingId ? `/api/cases/${editingId}` : "/api/cases", {
             method: editingId ? "PUT" : "POST",
             body: JSON.stringify(payload),
         });
         resetForm();
         await loadAll();
         showView("cases");
-        toast(wasEditing ? "Entry updated" : "Entry saved");
+        toast(wasEditing ? "Entry updated" : `Entry saved · ${saved.referenceId}`);
     }
     catch (error) {
         showFormErrors([error.message]);
@@ -429,8 +439,6 @@ function parseCsv(text) {
             queryDetails: raw.querydetails || "", remarks: raw.remarks || "",
         };
         const errors = validateFrontEnd(row, { knownReferences });
-        if (!errors.length && row.entryType === "New")
-            knownReferences.add(row.referenceId.trim().toLowerCase());
         return { ...row, valid: errors.length === 0, error: errors.join(" | ") };
     });
 }
@@ -438,7 +446,7 @@ function previewImport(rows) {
     importRows = rows;
     const valid = rows.filter(row => row.valid).length;
     $("#validation-count").textContent = `${valid} valid of ${rows.length} rows`;
-    $("#validation-results").innerHTML = rows.length ? `<div class="validation-list">${rows.map(row => `<div class="validation-row ${row.valid ? "valid" : "invalid"}"><strong>${escapeHtml(row.referenceId || "Unidentified row")}</strong><span>${row.valid ? "Ready to import" : escapeHtml(row.error)}</span></div>`).join("")}</div>` : "No rows found.";
+    $("#validation-results").innerHTML = rows.length ? `<div class="validation-list">${rows.map(row => `<div class="validation-row ${row.valid ? "valid" : "invalid"}"><strong>${escapeHtml(row.referenceId || row.requestId || row.clientName || "Unidentified row")}</strong><span>${row.valid ? "Ready to import" : escapeHtml(row.error)}</span></div>`).join("")}</div>` : "No rows found.";
     $("#import-valid").disabled = valid === 0;
 }
 async function importValid() {
@@ -453,7 +461,7 @@ async function importValid() {
             imported += 1;
         }
         catch (error) {
-            failures.push(`${row.referenceId}: ${error.message}`);
+            failures.push(`${row.referenceId || row.requestId || row.clientName}: ${error.message}`);
         }
     }
     await loadAll();
@@ -554,6 +562,7 @@ $("#case-table").addEventListener("click", event => {
         editCase(Number(button.dataset.id));
 });
 $("#case-form").addEventListener("submit", event => saveForm(event));
+($("#case-form").elements.namedItem("entryType")).addEventListener("change", syncReferenceField);
 $("#clear-form").addEventListener("click", resetForm);
 $("#choose-file").addEventListener("click", () => $("#csv-input").click());
 $("#csv-input").addEventListener("change", event => {
@@ -566,7 +575,7 @@ $("#csv-input").addEventListener("change", event => {
 });
 $("#import-valid").addEventListener("click", importValid);
 $("#download-template").addEventListener("click", () => {
-    const content = "Reference ID,Request ID,Entry Type,Client Name,PAN No,Account Type,Channel,Location,Segment,CSE Name,Processor Name,Owner,Inward Date,Latest Status\nREF-201,REQ-201,New,Example Client,ABCDE1234F,Individual,Physical,Mumbai,Retail,CSE A,Ops A,Operations,2026-07-29,Request Received from CSE\n";
+    const content = "Reference ID,Request ID,Entry Type,Client Name,PAN No,Account Type,Channel,Location,Segment,CSE Name,Processor Name,Owner,Inward Date,Latest Status\n,REQ-201,New,Example Client,ABCDE1234F,Individual,Physical,Mumbai,Retail,CSE A,Ops A,Operations,2026-07-29,Request Received from CSE\n";
     const anchor = document.createElement("a");
     anchor.href = URL.createObjectURL(new Blob([content], { type: "text/csv" }));
     anchor.download = "client-onboarding-upload-template.csv";

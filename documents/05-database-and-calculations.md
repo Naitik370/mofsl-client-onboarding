@@ -12,7 +12,7 @@ tags: [client-onboarding, database, mis]
 | `role_master` | One allowed role |
 | `users` | One login identity |
 | `sessions` | One server-side authenticated session |
-| `cases` | One stable Reference ID and its shared client metadata |
+| `cases` | One API-generated stable Reference ID and its shared client metadata |
 | `case_entries` | One New, Resubmission, Discrepancy Resolution, or Modification row |
 | `status_history` | One actual status change |
 | `status_master` | One status, stage, query mapping, and classification |
@@ -85,4 +85,3 @@ The report service replaces full PAN with `panMasked`, formatted like `AB*****34
 ## Process dates
 
 The report's `processDates` object is derived from status-history timestamps. These dates describe when the API recorded a status event. They are separate from manually supplied fields such as `outwardDate`, `resubmissionDate`, or `submittedDate` stored on the entry.
-

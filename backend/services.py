@@ -133,6 +133,14 @@ def lookup_id(db: sqlite3.Connection, table: str, name_column: str, name: str) -
     return row["id"] if row else None
 
 
+def generate_reference_id(db: sqlite3.Connection, event_timestamp: str) -> str:
+    prefix = f"MOFSL-{event_timestamp[:10].replace('-', '')}-"
+    while True:
+        reference_id = prefix + secrets.token_hex(4).upper()
+        if not db.execute("SELECT 1 FROM cases WHERE reference_id = ?", (reference_id,)).fetchone():
+            return reference_id
+
+
 def authenticate(username: str, password: str) -> dict | None:
     with database() as db:
         row = db.execute(
@@ -252,8 +260,6 @@ def validate(payload: dict, db: sqlite3.Connection, entry_id: int | None = None)
     if payload.get("status") == "Digital Form Sent to Client" and payload.get("channel") != "Digital":
         errors.append("Digital form submission requires the Digital channel")
     existing = db.execute("SELECT id FROM cases WHERE reference_id = ? COLLATE NOCASE", (payload.get("referenceId", ""),)).fetchone()
-    if not entry_id and payload.get("entryType") == "New" and existing:
-        errors.append("Reference ID already exists; use a resubmission or modification entry")
     if not entry_id and payload.get("entryType") != "New" and not existing:
         errors.append("Create the original case before adding a related entry")
     return errors
@@ -395,6 +401,8 @@ def save_case(payload: dict, entry_id: int | None = None, user: dict | None = No
     elif user["role"] == "mofsl":
         payload["owner"] = "MOFSL"
     with database() as db:
+        if creating_entry and payload.get("entryType") == "New":
+            payload["referenceId"] = generate_reference_id(db, now)
         access_errors = role_errors(payload, user, db, entry_id)
         if access_errors:
             return HTTPStatus.FORBIDDEN, {"errors": access_errors}

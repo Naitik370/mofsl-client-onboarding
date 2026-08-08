@@ -9,7 +9,7 @@ type MisReport = {
 type Meta = {statuses:Array<{status:string; stage:string}>; locations:string[]; segments:string[]; slaDays:number};
 type ImportRow = CaseRow & {valid:boolean; error:string};
 type User = {id:number; username:string; displayName:string; role:"admin"|"operations"|"cse"|"mofsl"|"viewer"};
-type ValidationContext = {knownReferences?:Set<string>; ignoreReference?:string};
+type ValidationContext = {knownReferences?:Set<string>};
 
 const $ = <T extends Element = HTMLElement>(selector:string) => document.querySelector(selector) as T;
 const $$ = <T extends Element = HTMLElement>(selector:string) => [...document.querySelectorAll(selector)] as T[];
@@ -19,6 +19,7 @@ let caseRows:CaseRow[] = [];
 let historyRows:CaseRow[] = [];
 let importRows:ImportRow[] = [];
 let editingId:number | null = null;
+let referenceLocked = false;
 let dimension = "cseName";
 let currentUser:User | null = null;
 const cseStatuses = new Set(["Request Received from CSE","Resubmitted by CSE","Discrepancy Resolution Received","Resubmitted Form Received - Under Review"]);
@@ -299,8 +300,9 @@ function formPayload():Record<string,string> {
 
 function validateFrontEnd(payload:Record<string,string>, context:ValidationContext = {}):string[] {
   const errors:string[] = [];
-  const required:Record<string,string> = {referenceId:"Reference ID",requestId:"Request ID",clientName:"Client name",pan:"PAN No",inwardDate:"Inward date",status:"Latest status"};
+  const required:Record<string,string> = {requestId:"Request ID",clientName:"Client name",pan:"PAN No",inwardDate:"Inward date",status:"Latest status"};
   Object.entries(required).forEach(([key,label]) => { if (!payload[key]?.trim()) errors.push(`${label} is required`); });
+  if (payload.entryType !== "New" && !payload.referenceId?.trim()) errors.push("Reference ID is required for related entries");
   if (payload.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(payload.pan)) errors.push("PAN No must use the standard PAN format");
   if (!entryTypes.has(payload.entryType)) errors.push("Entry type is invalid");
   if (!accountTypes.has(payload.accountType)) errors.push("Account type is invalid");
@@ -315,10 +317,6 @@ function validateFrontEnd(payload:Record<string,string>, context:ValidationConte
   if (payload.status === "Physical Form Submitted to CSE" && payload.channel !== "Physical") errors.push("Physical form submission requires the Physical channel");
   if (payload.status === "Digital Form Sent to Client" && payload.channel !== "Digital") errors.push("Digital form submission requires the Digital channel");
   const reference = payload.referenceId?.trim().toLowerCase();
-  const ignored = context.ignoreReference?.trim().toLowerCase();
-  if (reference && reference !== ignored && payload.entryType === "New" && context.knownReferences?.has(reference)) {
-    errors.push("Reference ID already exists; use a resubmission, discrepancy resolution, or modification entry");
-  }
   if (reference && payload.entryType !== "New" && !context.knownReferences?.has(reference)) {
     errors.push("Create the original case before adding a related entry");
   }
@@ -331,12 +329,23 @@ function showFormErrors(errors:string[]):void {
   box.innerHTML = errors.map(error => `<div>${escapeHtml(error)}</div>`).join("");
 }
 
+function syncReferenceField():void {
+  const form = $("#case-form") as HTMLFormElement;
+  const reference = form.elements.namedItem("referenceId") as HTMLInputElement;
+  const isNew = (form.elements.namedItem("entryType") as HTMLSelectElement).value === "New";
+  reference.readOnly = referenceLocked || isNew;
+  reference.required = !isNew;
+  reference.placeholder = isNew ? "Generated when saved" : "Existing Reference ID";
+  if (isNew && !referenceLocked) reference.value = "";
+}
+
 function resetForm():void {
   const form = $("#case-form") as HTMLFormElement;
   form.reset();
-  (form.elements.namedItem("referenceId") as HTMLInputElement).readOnly = false;
+  referenceLocked = false;
   $("#form-title").textContent = "New operational entry";
   editingId = null;
+  syncReferenceField();
   showFormErrors([]);
   if (currentUser?.role === "cse") {
     (form.elements.namedItem("cseName") as HTMLInputElement).value = currentUser.displayName;
@@ -351,6 +360,7 @@ function editCase(id:number):void {
     const control = form.elements.namedItem(key) as HTMLInputElement | HTMLSelectElement | null;
     if (control) control.value = String(value ?? "");
   });
+  referenceLocked = true;
   (form.elements.namedItem("referenceId") as HTMLInputElement).readOnly = true;
   if (currentUser && ["cse","mofsl"].includes(currentUser.role)) {
     editingId = null;
@@ -361,6 +371,7 @@ function editCase(id:number):void {
     editingId = id;
     $("#form-title").textContent = `Edit ${row.referenceId} / ${row.requestId}`;
   }
+  syncReferenceField();
   showView("entry");
   window.scrollTo({top:0, behavior:"smooth"});
 }
@@ -368,10 +379,8 @@ function editCase(id:number):void {
 async function saveForm(event:SubmitEvent):Promise<void> {
   event.preventDefault();
   const payload = applyAutomaticDates(formPayload());
-  const edited = editingId === null ? undefined : caseRows.find(row => Number(row.id) === editingId);
   const errors = validateFrontEnd(payload, {
     knownReferences:new Set(caseRows.map(row => String(row.referenceId).trim().toLowerCase())),
-    ignoreReference:edited ? String(edited.referenceId) : undefined,
   });
   showFormErrors(errors);
   if (errors.length) return;
@@ -379,14 +388,14 @@ async function saveForm(event:SubmitEvent):Promise<void> {
   const wasEditing = editingId !== null;
   button.disabled = true;
   try {
-    await api(editingId ? `/api/cases/${editingId}` : "/api/cases", {
+    const saved = await api<CaseRow>(editingId ? `/api/cases/${editingId}` : "/api/cases", {
       method: editingId ? "PUT" : "POST",
       body: JSON.stringify(payload),
     });
     resetForm();
     await loadAll();
     showView("cases");
-    toast(wasEditing ? "Entry updated" : "Entry saved");
+    toast(wasEditing ? "Entry updated" : `Entry saved · ${saved.referenceId}`);
   } catch (error) {
     showFormErrors([(error as Error).message]);
   } finally {
@@ -439,7 +448,6 @@ function parseCsv(text:string):ImportRow[] {
       queryDetails:raw.querydetails || "", remarks:raw.remarks || "",
     };
     const errors = validateFrontEnd(row, {knownReferences});
-    if (!errors.length && row.entryType === "New") knownReferences.add(row.referenceId.trim().toLowerCase());
     return {...row, valid:errors.length === 0, error:errors.join(" | ")} as ImportRow;
   });
 }
@@ -449,7 +457,7 @@ function previewImport(rows:ImportRow[]):void {
   const valid = rows.filter(row => row.valid).length;
   $("#validation-count").textContent = `${valid} valid of ${rows.length} rows`;
   $("#validation-results").innerHTML = rows.length ? `<div class="validation-list">${rows.map(row =>
-    `<div class="validation-row ${row.valid ? "valid" : "invalid"}"><strong>${escapeHtml(row.referenceId || "Unidentified row")}</strong><span>${row.valid ? "Ready to import" : escapeHtml(row.error)}</span></div>`
+    `<div class="validation-row ${row.valid ? "valid" : "invalid"}"><strong>${escapeHtml(row.referenceId || row.requestId || row.clientName || "Unidentified row")}</strong><span>${row.valid ? "Ready to import" : escapeHtml(row.error)}</span></div>`
   ).join("")}</div>` : "No rows found.";
   ($("#import-valid") as HTMLButtonElement).disabled = valid === 0;
 }
@@ -465,7 +473,7 @@ async function importValid():Promise<void> {
       await api("/api/cases", {method:"POST", body:JSON.stringify(payload)});
       imported += 1;
     } catch (error) {
-      failures.push(`${row.referenceId}: ${(error as Error).message}`);
+      failures.push(`${row.referenceId || row.requestId || row.clientName}: ${(error as Error).message}`);
     }
   }
   await loadAll();
@@ -566,6 +574,7 @@ $("#case-table").addEventListener("click", event => {
   if (button) editCase(Number(button.dataset.id));
 });
 $("#case-form").addEventListener("submit", event => saveForm(event as SubmitEvent));
+((($("#case-form") as HTMLFormElement).elements.namedItem("entryType")) as HTMLSelectElement).addEventListener("change", syncReferenceField);
 $("#clear-form").addEventListener("click", resetForm);
 $("#choose-file").addEventListener("click", () => ($("#csv-input") as HTMLInputElement).click());
 $("#csv-input").addEventListener("change", event => {
@@ -577,7 +586,7 @@ $("#csv-input").addEventListener("change", event => {
 });
 $("#import-valid").addEventListener("click", importValid);
 $("#download-template").addEventListener("click", () => {
-  const content = "Reference ID,Request ID,Entry Type,Client Name,PAN No,Account Type,Channel,Location,Segment,CSE Name,Processor Name,Owner,Inward Date,Latest Status\nREF-201,REQ-201,New,Example Client,ABCDE1234F,Individual,Physical,Mumbai,Retail,CSE A,Ops A,Operations,2026-07-29,Request Received from CSE\n";
+  const content = "Reference ID,Request ID,Entry Type,Client Name,PAN No,Account Type,Channel,Location,Segment,CSE Name,Processor Name,Owner,Inward Date,Latest Status\n,REQ-201,New,Example Client,ABCDE1234F,Individual,Physical,Mumbai,Retail,CSE A,Ops A,Operations,2026-07-29,Request Received from CSE\n";
   const anchor = document.createElement("a");
   anchor.href = URL.createObjectURL(new Blob([content], {type:"text/csv"}));
   anchor.download = "client-onboarding-upload-template.csv";

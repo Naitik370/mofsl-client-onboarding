@@ -82,14 +82,15 @@ class MisLogicTest(unittest.TestCase):
         operations = {"role": "operations", "displayName": "Operations Demo"}
         stage_five = dict(base, referenceId="REF-MOFSL", requestId="REQ-MOFSL", cseName="CSE Other",
                           status="Submitted to MOFSL")
-        status, _ = server.save_case(stage_five, user=operations)
+        status, stage_five_row = server.save_case(stage_five, user=operations)
         self.assertEqual(status, 201)
-        mofsl_update = dict(stage_five, requestId="REQ-MOFSL-2", entryType="Modification",
+        mofsl_update = dict(stage_five, referenceId=stage_five_row["referenceId"],
+                            requestId="REQ-MOFSL-2", entryType="Modification",
                             status="Query Raised by MOFSL", queryDetails="Signature mismatch")
         status, _ = server.save_case(mofsl_update, user={"role": "mofsl", "displayName": "MOFSL Demo"})
         self.assertEqual(status, 201)
 
-    def test_backend_validates_controlled_values_pan_dates_and_duplicates(self):
+    def test_backend_validates_controlled_values_pan_dates_and_generated_references(self):
         base = {
             "referenceId": "REF-VALID", "requestId": "REQ-VALID", "entryType": "New",
             "clientName": "Validation Test", "pan": "abcde1234f", "accountType": "Individual",
@@ -100,10 +101,12 @@ class MisLogicTest(unittest.TestCase):
         status, row = server.save_case(base)
         self.assertEqual(status, 201)
         self.assertEqual(row["pan"], "ABCDE1234F")
+        self.assertRegex(row["referenceId"], r"^MOFSL-\d{8}-[0-9A-F]{8}$")
+        self.assertNotEqual(row["referenceId"], base["referenceId"])
 
-        status, body = server.save_case(base)
-        self.assertEqual(status, 400)
-        self.assertTrue(any("Reference ID already exists" in error for error in body["errors"]))
+        status, second = server.save_case(base)
+        self.assertEqual(status, 201)
+        self.assertNotEqual(second["referenceId"], row["referenceId"])
 
         invalid = dict(base, referenceId="REF-INVALID", requestId="REQ-INVALID",
                        accountType="Trust", owner="Unknown", inwardDate="not-a-date")
@@ -121,8 +124,9 @@ class MisLogicTest(unittest.TestCase):
             "cseName": "CSE A", "processorName": "Ops A", "owner": "Operations",
             "inwardDate": "2026-07-01", "status": "Request Received from CSE",
         }
-        server.save_case(base)
-        related = dict(base, requestId="REQ-HISTORY-2", entryType="Modification",
+        _, original = server.save_case(base)
+        related = dict(base, referenceId=original["referenceId"],
+                       requestId="REQ-HISTORY-2", entryType="Modification",
                        status="Submitted to MOFSL", inwardDate="2026-07-02",
                        submittedDate=date.today().isoformat())
         status, row = server.save_case(related)
@@ -152,10 +156,11 @@ class MisLogicTest(unittest.TestCase):
             "cseName": "CSE A", "processorName": "Ops A", "owner": "Operations",
             "inwardDate": "2026-07-01", "status": "Application Form Under Preparation",
         }
-        status, _ = server.save_case(base)
+        status, original = server.save_case(base)
         self.assertEqual(status, 201)
 
-        manual = dict(base, requestId="REQ-DATES-2", entryType="Modification",
+        manual = dict(base, referenceId=original["referenceId"],
+                      requestId="REQ-DATES-2", entryType="Modification",
                       status="Physical Form Submitted to CSE", outwardDate="")
         status, row = server.save_case(manual, user={"role": "operations", "displayName": "Operations"})
         self.assertEqual(status, 201)
@@ -220,7 +225,7 @@ class HttpEndToEndTest(unittest.TestCase):
         except HTTPError as error:
             return error.code, json.load(error)
 
-    def test_login_create_duplicate_report_and_history_over_http(self):
+    def test_login_create_generated_reference_report_and_history_over_http(self):
         status, user = self.request(
             "/api/auth/login", "POST",
             {"username": "operations", "password": "OpsDemo@123"},
@@ -235,20 +240,105 @@ class HttpEndToEndTest(unittest.TestCase):
             "cseName": "CSE A", "processorName": "Ops A", "owner": "Operations",
             "inwardDate": "2026-07-01", "status": "Request Received from CSE",
         }
-        status, _ = self.request("/api/cases", "POST", case)
+        status, created = self.request("/api/cases", "POST", case)
         self.assertEqual(status, 201)
-        status, duplicate = self.request("/api/cases", "POST", case)
-        self.assertEqual(status, 400)
-        self.assertIn("Reference ID already exists", duplicate["errors"][0])
+        self.assertRegex(created["referenceId"], r"^MOFSL-\d{8}-[0-9A-F]{8}$")
+        self.assertNotEqual(created["referenceId"], case["referenceId"])
+        status, second = self.request("/api/cases", "POST", case)
+        self.assertEqual(status, 201)
+        self.assertNotEqual(second["referenceId"], created["referenceId"])
 
         status, report = self.request("/api/reports")
         self.assertEqual(status, 200)
-        self.assertEqual(report["summary"]["total"], 1)
+        self.assertEqual(report["summary"]["total"], 2)
         self.assertNotIn("pan", report["cases"][0])
         status, history = self.request("/api/history")
         self.assertEqual(status, 200)
         self.assertEqual(history[0]["changedBy"], "Operations Demo")
         self.assertTrue(history[0]["timestamp"])
+
+    def test_every_role_http_journey_and_permissions(self):
+        def login(username, password, role):
+            self.client = build_opener(HTTPCookieProcessor(CookieJar()))
+            status, user = self.request(
+                "/api/auth/login", "POST",
+                {"username": username, "password": password},
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(user["role"], role)
+
+        base = {
+            "requestId": "REQ-E2E-OPS", "entryType": "New",
+            "clientName": "Role Journey", "pan": "ABCDE1234F", "accountType": "Individual",
+            "channel": "Physical", "location": "Mumbai", "segment": "Retail",
+            "cseName": "CSE Demo", "processorName": "Operations Demo", "owner": "Operations",
+            "inwardDate": "2026-08-03", "status": "Request Received from CSE",
+        }
+
+        login("operations", "OpsDemo@123", "operations")
+        status, created = self.request("/api/cases", "POST", base)
+        self.assertEqual(status, 201)
+        reference_id = created["referenceId"]
+
+        login("cse", "CseDemo@123", "cse")
+        status, rows = self.request("/api/cases")
+        self.assertEqual(status, 200)
+        self.assertEqual({row["referenceId"] for row in rows}, {reference_id})
+        cse_update = dict(
+            base, referenceId=reference_id, requestId="REQ-E2E-CSE",
+            entryType="Resubmission", status="Resubmitted by CSE",
+            resubmissionDate="2026-08-04",
+        )
+        status, updated = self.request("/api/cases", "POST", cse_update)
+        self.assertEqual(status, 201)
+        self.assertEqual(updated["owner"], "Operations")
+        status, denied = self.request(
+            "/api/cases", "POST",
+            dict(cse_update, requestId="REQ-E2E-CSE-DENIED", status="Submitted to MOFSL"),
+        )
+        self.assertEqual(status, 403)
+        self.assertIn("CSE users", denied["errors"][0])
+
+        login("operations", "OpsDemo@123", "operations")
+        stage_five = dict(
+            base, referenceId=reference_id, requestId="REQ-E2E-STAGE5",
+            entryType="Modification", status="Submitted to MOFSL",
+            submittedDate="2026-08-05", owner="MOFSL",
+        )
+        status, _ = self.request("/api/cases", "POST", stage_five)
+        self.assertEqual(status, 201)
+
+        login("mofsl", "MofslDemo@123", "mofsl")
+        status, rows = self.request("/api/cases")
+        self.assertEqual(status, 200)
+        self.assertIn(reference_id, {row["referenceId"] for row in rows})
+        mofsl_update = dict(
+            stage_five, requestId="REQ-E2E-MOFSL", status="Query Raised by MOFSL",
+            queryDetails="Signature clarification required",
+        )
+        status, updated = self.request("/api/cases", "POST", mofsl_update)
+        self.assertEqual(status, 201)
+        self.assertEqual(updated["owner"], "MOFSL")
+
+        login("viewer", "ViewDemo@123", "viewer")
+        status, rows = self.request("/api/cases")
+        self.assertEqual(status, 200)
+        self.assertNotIn("pan", rows[0])
+        self.assertIn("panMasked", rows[0])
+        status, _ = self.request("/api/cases", "POST", base)
+        self.assertEqual(status, 403)
+        status, _ = self.request("/api/users")
+        self.assertEqual(status, 403)
+
+        login("admin", "AdminDemo@123", "admin")
+        status, users = self.request("/api/users")
+        self.assertEqual(status, 200)
+        self.assertEqual({user["role"] for user in users}, {"admin", "operations", "cse", "mofsl", "viewer"})
+        status, _ = self.request(
+            "/api/users", "POST",
+            {"username": "e2e-viewer", "displayName": "E2E Viewer", "role": "viewer", "password": "E2eViewer@123"},
+        )
+        self.assertEqual(status, 201)
 
 
 if __name__ == "__main__":

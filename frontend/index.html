@@ -122,7 +122,7 @@
         <section class="report-panel form-panel">
           <form id="case-form">
             <div class="form-grid">
-              <label>Reference ID *<input name="referenceId" required placeholder="REF-201"></label>
+              <label>Reference ID<input name="referenceId" readonly placeholder="Generated when saved"><small>Generated automatically for New entries. Use an existing ID for related entries.</small></label>
               <label>Request ID *<input name="requestId" required placeholder="REQ-201"></label>
               <label>Entry type<select name="entryType"><option>New</option><option>Resubmission</option><option>Discrepancy Resolution</option><option>Modification</option></select></label>
               <label>Client name *<input name="clientName" required></label>
@@ -157,7 +157,7 @@
         <div class="section-heading"><div><h2>Bulk Upload</h2><p>Validate a CSV in the browser, then submit each valid row through the same API.</p></div></div>
         <div class="upload-grid">
           <section class="report-panel upload-panel">
-            <div class="dropzone"><strong>Select onboarding CSV</strong><span>Required headers: Reference ID, Request ID, Client Name, PAN No, Inward Date, Latest Status</span><input id="csv-input" type="file" accept=".csv,text/csv"><button class="ghost-btn" id="choose-file" type="button">Choose CSV</button></div>
+            <div class="dropzone"><strong>Select onboarding CSV</strong><span>Required headers: Request ID, Client Name, PAN No, Inward Date, Latest Status. Reference ID is only required for related entries.</span><input id="csv-input" type="file" accept=".csv,text/csv"><button class="ghost-btn" id="choose-file" type="button">Choose CSV</button></div>
             <button class="text-btn" id="download-template">Download template</button>
           </section>
           <section class="report-panel validation-panel">

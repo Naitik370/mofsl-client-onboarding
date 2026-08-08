@@ -17,6 +17,8 @@ This directory explains the application as it is currently implemented. The guid
 3. [Frontend code walkthrough](03-frontend-code-walkthrough.md)
 4. [Status handling reference](04-status-handling-reference.md)
 5. [Database and calculations](05-database-and-calculations.md)
+6. [End-user guide](06-end-user-guide.md)
+7. [Stage flow and edge-case guide — standalone HTML](user-stories-and-case-handling.html)
 
 > [!important]
 > “Intended workflow” and “enforced behavior” are different. The application maps every status to a stage, but it does not currently enforce a transition graph such as Stage 1 → Stage 2 → Stage 3.
@@ -36,4 +38,3 @@ This directory explains the application as it is currently implemented. The guid
 | Server startup | `backend/server.py` |
 | Database definition | `sql/schema.sql` |
 | Tests | `backend/test_server.py` |
-
