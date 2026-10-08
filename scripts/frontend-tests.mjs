@@ -26,14 +26,43 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const libModule = `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`;
 const sharedModule = componentModule('../frontend/components/shared.tsx', { '../lib': libModule });
+const navigationModule = componentModule('../frontend/navigation.ts');
+const { parseRoute, routeHash } = await import(navigationModule);
+const { CaseDetails } = await import(
+  componentModule('../frontend/components/CaseDetails.tsx', {
+    '../lib': libModule,
+    './shared': sharedModule,
+  })
+);
 const { CaseEntry } = await import(
   componentModule('../frontend/components/CaseEntry.tsx', {
     '../lib': libModule,
     './shared': sharedModule,
   })
 );
-const { parseCsv, csvRecords, defaults, validate, api, ApiError, visibleDateFields, dateFields } =
-  await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { CaseRegister } = await import(
+  componentModule('../frontend/components/ReportingViews.tsx', {
+    '../lib': libModule,
+    './shared': sharedModule,
+    './CaseDetails': componentModule('../frontend/components/CaseDetails.tsx', {
+      '../lib': libModule,
+      './shared': sharedModule,
+    }),
+    '../navigation': navigationModule,
+  })
+);
+const {
+  parseCsv,
+  csvRecords,
+  defaults,
+  validate,
+  api,
+  ApiError,
+  visibleDateFields,
+  dateFields,
+  latestCaseEntries,
+  fieldValidationErrors,
+} = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const user = { id: 1, username: 'operations', displayName: 'Operations Demo', role: 'operations' };
 const meta = {
   statuses: ['Request Received from CSE', 'Account Opened', 'Query Raised by MOFSL'].map(
@@ -51,6 +80,32 @@ const valid = {
   pan: 'ABCDE1234F',
   inwardDate: '2026-07-01',
 };
+
+test('case details renders a labelled dialog with the case metrics and close control', () => {
+  const html = renderToStaticMarkup(
+    createElement(CaseDetails, {
+      row: {
+        referenceId: 'REF-1',
+        touchCount: 3,
+        grossTat: 7,
+        netTat: 5,
+        processDates: { inwardDate: '2026-07-01' },
+      },
+      report: null,
+      onClose: () => {},
+    }),
+  );
+  assert.match(
+    html,
+    /<dialog[^>]*class="case-details-drawer"[^>]*aria-labelledby="case-details-title"/,
+  );
+  assert(html.includes('id="case-details-title"'));
+  assert(html.includes('Case details · REF-1'));
+  assert(html.includes('Close details'));
+  assert(html.includes('Touch Count'));
+  assert(html.includes('Not observed'));
+  assert(html.includes('Gross TAT'));
+});
 
 test('New entries default inward to the server date while edits preserve supplied dates', () => {
   for (const role of ['admin', 'operations', 'cse']) {
@@ -71,6 +126,59 @@ test('New entries default inward to the server date while edits preserve supplie
   assert.match(html, /name="inwardDate"[^>]*value="2026-07-01"/);
 });
 
+test('CSE new submissions use Operations review and queried updates select resubmission', () => {
+  const cse = { ...user, role: 'cse', displayName: 'CSE Demo' };
+  const workflowMeta = {
+    ...meta,
+    statuses: ['Under Review by Operations', 'Resubmitted by CSE'].map((status) => ({
+      status,
+      stage: 'Stage 1',
+    })),
+  };
+  assert.equal(defaults(cse, workflowMeta).status, 'Under Review by Operations');
+  const queried = {
+    ...valid,
+    id: 1,
+    referenceId: 'REF-1',
+    status: 'Query Raised to CSE - Missing Information',
+  };
+  const html = renderToStaticMarkup(
+    createElement(CaseEntry, {
+      user: cse,
+      meta: workflowMeta,
+      cases: [queried],
+      selected: queried,
+      onSaved: async () => {},
+      onClear: () => {},
+      onError: String,
+    }),
+  );
+  assert.match(html, /name="entryType"[^>]*><option selected="">Resubmission<\/option><\/select>/);
+  assert.match(
+    html,
+    /name="status"[^>]*><optgroup label="Stage 1"><option selected="">Resubmitted by CSE<\/option><\/optgroup><\/select>/,
+  );
+});
+
+test('automatic status and stage override controls respect the user role', () => {
+  for (const role of ['admin', 'operations', 'cse', 'mofsl']) {
+    const html = renderToStaticMarkup(
+      createElement(CaseEntry, {
+        user: { ...user, role },
+        meta,
+        cases: [],
+        selected: null,
+        onSaved: async () => {},
+        onClear: () => {},
+        onError: String,
+      }),
+    );
+    assert.match(html, /name="autoStatus"[^>]*checked=""/);
+    assert.equal(html.includes('name="stageOverride"'), ['admin', 'operations'].includes(role));
+    assert(html.includes('Current Stage'));
+  }
+});
+
 test('new Stage 1 form does not display later-stage dates', () => {
   const html = renderToStaticMarkup(
     createElement(CaseEntry, {
@@ -87,6 +195,104 @@ test('new Stage 1 form does not display later-stage dates', () => {
   assert(html.includes('name="stage1QueryRaisedDate"'));
   assert(!html.includes('name="formPreparedDate"'));
   assert(!html.includes('name="accountOpeningDate"'));
+  for (const field of [
+    'accountNumber',
+    'discrepancyType',
+    'stage4ReviewOutcome',
+    'mofslQueryType',
+    'resubmissionDate',
+  ])
+    assert(!html.includes(`name="${field}"`));
+  for (const section of ['Client', 'Assignment', 'Status &amp; dates', 'Notes'])
+    assert(html.includes(`<legend>${section}</legend>`));
+  assert(!html.includes('Touch Count'));
+  assert(!html.includes('Show all process dates'));
+  assert(!html.includes('Dates follow Latest status. Previously entered dates remain saved.'));
+});
+
+test('register groups entries by reference and renders only the latest status with actions first', () => {
+  const entries = [
+    {
+      id: 1,
+      caseId: 1,
+      referenceId: 'REF-1',
+      status: 'Old status',
+      updatedAt: '2026-07-01',
+      clientName: 'Client',
+    },
+    {
+      id: 3,
+      caseId: 1,
+      referenceId: 'REF-1',
+      status: 'Latest status',
+      updatedAt: '2026-07-03',
+      clientName: 'Client',
+    },
+    {
+      id: 2,
+      caseId: 1,
+      referenceId: 'REF-1',
+      status: 'Earlier status',
+      updatedAt: '2026-07-03',
+      clientName: 'Client',
+    },
+    {
+      id: 4,
+      caseId: 2,
+      referenceId: 'REF-2',
+      status: 'Other case',
+      updatedAt: '2026-07-02',
+      clientName: 'Other',
+    },
+  ];
+  assert.deepEqual(
+    latestCaseEntries(entries).map((row) => row.id),
+    [3, 4],
+  );
+  const html = renderToStaticMarkup(
+    createElement(CaseRegister, {
+      cases: entries,
+      meta,
+      user,
+      metrics: null,
+      onEdit: () => {},
+      onDetails: () => {},
+    }),
+  );
+  assert(html.includes('2 cases'));
+  assert(!html.includes('Old status'));
+  assert(!html.includes('Earlier status'));
+  assert.equal((html.match(/class="case-row"/g) || []).length, 2);
+  assert(html.includes('<th>Actions</th><th>Reference</th>'));
+  assert(html.includes('href="#/cases/REF-1"'));
+  assert(html.includes('tabindex="0"'));
+});
+
+test('hash routes preserve the screen and case reference and reject malformed routes', () => {
+  for (const view of ['dashboard', 'cases', 'entry', 'history', 'analysis'])
+    assert.equal(parseRoute(routeHash(view)).view, view);
+  assert.deepEqual(parseRoute(routeHash('cases', 'REF/A B')), {
+    view: 'cases',
+    referenceId: 'REF/A B',
+  });
+  assert.deepEqual(parseRoute('#/entry/REF-1'), { view: 'entry', referenceId: 'REF-1' });
+  assert.deepEqual(parseRoute('#/cases/%bad'), { view: 'cases', referenceId: null });
+  assert.deepEqual(parseRoute('#/unknown'), { view: 'dashboard', referenceId: null });
+});
+
+test('field errors associate frontend and API validation messages with controls', () => {
+  const result = fieldValidationErrors([
+    'PAN No must use the standard PAN format',
+    'stage1QueryRaisedDate is invalid',
+    'A closed case requires account number and account opening date',
+    'Create the original case before adding a related entry',
+    'CSE users can only update their own cases',
+  ]);
+  assert.equal(result.fields.pan.length, 1);
+  assert.equal(result.fields.stage1QueryRaisedDate.length, 1);
+  assert.equal(result.fields.accountNumber.length, 1);
+  assert.equal(result.fields.referenceId.length, 1);
+  assert.deepEqual(result.general, ['CSE users can only update their own cases']);
 });
 
 test('entry form shows dates for each master stage and the selected channel', () => {

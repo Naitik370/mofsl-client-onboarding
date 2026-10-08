@@ -312,9 +312,9 @@ export const topics = [
     roles: ['admin', 'operations', 'cse'],
     summary: 'CSE sends the request; Operations checks whether information is complete.',
     user: [
-      'Create a New entry with Request Received from CSE.',
-      'Operations can record Under Review by Operations.',
-      'If information is missing, Operations records Query Raised to CSE - Missing Information with details. CSE records Resubmitted by CSE after resolving it.',
+      'CSE saves a New entry and the status automatically becomes Under Review by Operations.',
+      'New process dates select completed-action statuses automatically on save. Choosing Latest status manually disables this option. Operations selects queries, review initiation, and exceptions deliberately.',
+      'If Operations selects Query Raised to CSE - Missing Information, the CSE update automatically selects Resubmission and Resubmitted by CSE.',
     ],
     system: [
       'New saves generate a Reference ID. A query-start event increments query count and makes the case NRFT.',
@@ -414,7 +414,7 @@ export const topics = [
     roles: ['admin', 'operations', 'cse'],
     summary: 'CSE provides the correction; Operations confirms readiness.',
     user: [
-      'CSE uses Add update and records Discrepancy Resolution Received or Resubmitted Form Received - Under Review.',
+      'CSE uses Add update. A discrepancy/return response automatically selects Discrepancy Resolution and Discrepancy Resolution Received. Operations can use dated receipts or a Found in Order review outcome to select the next status automatically.',
       'Operations checks the response and records Form Found in Order - Ready for MOFSL Submission.',
     ],
     system: [
@@ -553,8 +553,8 @@ export const topics = [
       'Fill required fields, choose a permitted status, and choose Save entry.',
     ],
     system: [
-      'CaseEntry starts with defaults or a selected row. CSE/MOFSL prepares a related update; Admin/Operations edits the selected entry.',
-      'Date fields follow the selected master stage and channel. Show all process dates reveals other dates without clearing saved values.',
+      'CaseEntry starts with defaults or a selected row. New process dates and Stage 4 outcomes infer status on save. Current Stage derives from populated fields; Admin/Operations can override it. CSE/MOFSL prepares a related update; Admin/Operations edits the selected entry.',
+      'Date fields follow the selected master stage and channel. Existing-case edits and related entries offer Show all process dates for corrections without clearing saved values.',
       'Frontend validation checks required fields, PAN, masters, dates, channel consistency, query details, and known related references.',
       'POST /api/cases creates an entry. PUT /api/cases/{id} updates an entry.',
     ],
@@ -624,6 +624,7 @@ export const topics = [
     system: [
       'PreparePayload trims strings, uppercases PAN, normalizes valid DD-MM-YYYY dates, and applies role-specific CSE/owner values.',
       'CaseAccessPolicy checks permitted statuses, existing ownership, and stage context.',
+      'StatusAutomation uses newly entered process dates or a Stage 4 review outcome to infer completed actions. Inferred statuses still pass authorization and validation; manual selections and exceptions remain authoritative.',
       'CaseValidator verifies masters, controlled values, date validity, closed/query requirements, and original-case existence.',
     ],
     data: 'Normalized payload + existing case context + authenticated User.',
@@ -632,6 +633,10 @@ export const topics = [
       {
         file: 'backend/dotnet/CaseService.cs',
         marker: 'public (int Status, object Body) SaveCase',
+      },
+      {
+        file: 'backend/dotnet/StatusAutomation.cs',
+        marker: 'public static void Apply',
       },
       {
         file: 'backend/dotnet/CaseValidator.cs',
@@ -971,19 +976,19 @@ export const topics = [
     chapter: 'reports',
     title: 'Search the register and start an edit or update',
     roles: ['admin', 'operations', 'cse', 'mofsl', 'viewer'],
-    summary: 'Each displayed row is an entry, with case-level metrics attached for context.',
+    summary: 'Each displayed row is the latest saved entry for one case, with case-level metrics.',
     user: [
       'Search a reference/client or filter by status.',
       'Admin/Operations chooses Edit. CSE/MOFSL chooses Add update. Viewer has no write action.',
-      'Choose Details for original inward, resubmission count, automatic touches, stage timing, SLA, and all process dates.',
+      'Click a row or Details to open its case URL and right sidebar for metrics, dates, entry history, and status history. Close with Close details, Escape, or the backdrop.',
     ],
     system: [
-      'CaseRegister filters the visible entries locally.',
+      'CaseRegister selects the latest entry for each Reference ID, then applies search and status filters locally.',
       'It joins case metrics by caseId from the unfiltered reporting snapshot.',
       'App opens CaseEntry with the selected row; initialEntry decides whether it is an exact edit or a related update.',
     ],
     data: 'PAN is masked on screen. Viewer case responses omit raw PAN; permitted operational case responses can include PAN for editing.',
-    note: 'Register query/hold/TAT fields describe the current case, not only the row’s own entry status.',
+    note: 'The register shows one current row per Reference ID. The details drawer retains entry and status history; pinned left actions and clickable rows keep access visible. Hash URLs preserve screen and case selection across refresh and Back.',
     sources: [
       {
         file: 'frontend/components/ReportingViews.tsx',

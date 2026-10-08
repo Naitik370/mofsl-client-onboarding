@@ -126,11 +126,18 @@ public sealed class ReportService(Database database, TimeProvider clock)
                 foreach (var field in EntryFields.Dates.Keys)
                     if (entry.Text(field) != "" && field != "statusDate")
                         suppliedDates[field] = entry.Text(field);
-                foreach (var (source, target) in new[] { ("signedFormDate", "signedFormReceivedDate"), ("submittedDate", "submittedToMofslDate"), ("accountOpeningDate", "accountOpeningDate") })
+                foreach (var (source, target) in new[] { ("outwardDate", "outwardDate"), ("signedFormDate", "signedFormReceivedDate"), ("submittedDate", "submittedToMofslDate"), ("accountOpeningDate", "accountOpeningDate") })
                     if (entry.Text(source) != "")
                         suppliedDates[target] = entry.Text(source);
             }
             current["suppliedProcessDates"] = suppliedDates;
+            var stageFields = new Dictionary<string, object?>(current);
+            foreach (var entry in group.Reverse())
+                foreach (var (field, _) in EntryFields.Columns.Concat(DateFields.Select(field => new KeyValuePair<string, string>(field, field))))
+                    if (entry.Text(field) != "")
+                        stageFields[field] = entry.Text(field);
+            current["derivedStage"] = StatusAutomation.DerivedStage(stageFields);
+            current["stage"] = current.Text("stageOverride") != "" ? current.Text("stageOverride") : current["derivedStage"];
             latest.Add(current);
         }
         return latest;
@@ -154,7 +161,7 @@ public sealed class ReportService(Database database, TimeProvider clock)
         row["rft"] = queries > 0 ? "NRFT" : "RFT";
         row["grossTat"] = gross;
         row["netTat"] = Math.Max(0, gross - hold);
-        row["aging"] = isClosed ? 0 : WorkingDays(inward, today, holidays);
+        row["aging"] = IsOpen(row) ? WorkingDays(inward, today, holidays) : 0;
         row["slaBreach"] = gross > sla;
         row["panMasked"] = MaskPan(row.Text("pan"));
         row.Remove("pan");

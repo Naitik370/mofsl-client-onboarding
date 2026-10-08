@@ -39,6 +39,7 @@ export const discrepancyTypes = [
 export const reviewOutcomes = ['Found in Order', 'Still Pending'];
 export type ImportRow = { payload: Record<string, string>; errors: string[]; imported?: boolean };
 export const cseStatuses = [
+  'Under Review by Operations',
   'Request Received from CSE',
   'Resubmitted by CSE',
   'Discrepancy Resolution Received',
@@ -131,11 +132,14 @@ const automaticDateFields: Record<string, string> = {
   'Communication Sent - Case Closed': 'communicationSentDate',
 };
 export class ApiError extends Error {
+  readonly errors: string[];
   constructor(
     message: string,
     public status: number,
+    errors?: string[],
   ) {
     super(message);
+    this.errors = errors || [message];
   }
 }
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -149,8 +153,60 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     throw new ApiError(
       (body.errors || [body.error || 'Request failed']).join(' | '),
       response.status,
+      body.errors || [body.error || 'Request failed'],
     );
   return body;
+}
+
+export function latestCaseEntries(entries: Row[]): Row[] {
+  const latest = new Map<string, Row>();
+  for (const entry of [...entries].sort(
+    (a, b) =>
+      String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')) ||
+      Number(b.id) - Number(a.id),
+  )) {
+    const reference = String(entry.referenceId || '').toLowerCase();
+    if (!latest.has(reference)) latest.set(reference, entry);
+  }
+  return [...latest.values()];
+}
+
+export function fieldValidationErrors(messages: string[]): {
+  fields: Record<string, string[]>;
+  general: string[];
+} {
+  const labels: Record<string, string[]> = {
+    ...Object.fromEntries(Object.entries(dateLabels).map(([field, label]) => [field, [label]])),
+    referenceId: ['Reference ID', 'Create the original case'],
+    requestId: ['Request ID'],
+    clientName: ['Client name'],
+    pan: ['PAN No'],
+    entryType: ['Entry type'],
+    status: ['Latest status'],
+    accountType: ['Account type'],
+    channel: ['Channel', 'Physical form submission', 'Digital form submission'],
+    owner: ['Current owner'],
+    location: ['Location'],
+    segment: ['Segment'],
+    discrepancyType: ['Discrepancy type'],
+    stage4ReviewOutcome: ['Stage 4 review outcome', 'A pending Stage 4 review'],
+    stageOverride: ['Current stage override'],
+    queryDetails: ['Query / event details'],
+    accountNumber: ['A closed case requires account number'],
+    accountOpeningDate: ['Account opening date', 'A closed case requires account number'],
+    physicalFormSubmittedDate: ['Physical form submitted to CSE date', 'Physical submission date'],
+    digitalFormSentDate: ['Digital form sent to client date', 'Digital submission date'],
+  };
+  const fields: Record<string, string[]> = {};
+  const general: string[] = [];
+  for (const message of messages) {
+    const matching = Object.entries(labels).filter(([field, names]) =>
+      [field, ...names].some((label) => message.toLowerCase().startsWith(label.toLowerCase())),
+    );
+    if (!matching.length) general.push(message);
+    for (const [field] of matching) (fields[field] ||= []).push(message);
+  }
+  return { fields, general };
 }
 export function formatDate(value: unknown): string {
   return value
@@ -188,7 +244,12 @@ export function defaults(user: User, meta: Meta): Record<string, string> {
     submittedDate: '',
     accountOpeningDate: '',
     accountNumber: '',
-    status: user.role === 'mofsl' ? mofslStatuses[0] : 'Request Received from CSE',
+    status:
+      user.role === 'mofsl'
+        ? mofslStatuses[0]
+        : user.role === 'cse'
+          ? 'Under Review by Operations'
+          : 'Request Received from CSE',
     queryDetails: '',
     remarks: '',
     stage1QueryDetails: '',
@@ -196,6 +257,8 @@ export function defaults(user: User, meta: Meta): Record<string, string> {
     stage4ReviewOutcome: '',
     mofslQueryType: '',
     autoCaptureDates: 'false',
+    autoStatus: 'true',
+    stageOverride: '',
   };
 }
 export function validate(

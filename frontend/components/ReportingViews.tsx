@@ -1,5 +1,15 @@
 import { useState } from 'react';
-import { closed, excluded, formatDate, type Meta, type Report, type Row, type User } from '../lib';
+import {
+  closed,
+  excluded,
+  formatDate,
+  latestCaseEntries,
+  type Meta,
+  type Report,
+  type Row,
+  type User,
+} from '../lib';
+import { routeHash } from '../navigation';
 import { dimensionLabels, Panel, Status, Table, text } from './shared';
 import type { DateRange } from '../useWorkspace';
 import { CaseDetails } from './CaseDetails';
@@ -152,28 +162,38 @@ export function CaseRegister({
   meta,
   user,
   onEdit,
+  detailReference = null,
+  onDetails,
+  history = [],
 }: {
   cases: Row[];
   metrics: Report | null;
   meta: Meta;
   user: User;
   onEdit: (row: Row) => void;
+  detailReference?: string | null;
+  onDetails: (reference: string | null) => void;
+  history?: Row[];
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [details, setDetails] = useState<Row | null>(null);
   const derived = new Map((metrics?.cases || []).map((row) => [row.caseId, row]));
-  const visible = cases.filter(
+  const current = latestCaseEntries(cases);
+  const details = current.find(
+    (row) => text(row.referenceId).toLowerCase() === detailReference?.toLowerCase(),
+  );
+  const visible = current.filter(
     (row) =>
       (!search || Object.values(row).join(' ').toLowerCase().includes(search.toLowerCase())) &&
       (!statusFilter || row.status === statusFilter),
   );
 
   return (
-    <section className="view active">
+    <section className="view active case-register">
       <div className="section-heading">
         <div>
           <h2>Case Register</h2>
+          <p>{current.length} cases · Latest saved status per case</p>
         </div>
         <div className="entry-tools">
           <input
@@ -197,64 +217,90 @@ export function CaseRegister({
       <Panel>
         <Table
           headings={[
+            'Actions',
             'Reference',
             'Client',
-            'Masked PAN',
             'Inward',
-            'Entry stage',
-            'Entry status',
-            'Case queries',
-            'Case hold',
-            'Case RFT',
-            'Case net TAT',
-            'Touches',
-            'Actions',
+            'Latest status',
+            'Queries',
+            'RFT',
+            'Net TAT',
           ]}
           empty={!visible.length}
         >
           {visible.map((row) => {
             const calculated = derived.get(row.caseId) || row;
             return (
-              <tr key={Number(row.id)}>
-                <td>
-                  <strong>{text(row.referenceId)}</strong>
-                  <small className="subline">{text(row.entryType)}</small>
-                </td>
-                <td>{text(row.clientName)}</td>
-                <td>{text(calculated.panMasked || row.panMasked || 'Protected')}</td>
-                <td>{formatDate(row.inwardDate)}</td>
-                <td>{text(row.stage)}</td>
-                <td>
-                  <Status value={row.status} />
-                </td>
-                <td>{text(calculated.queryCount ?? '-')}</td>
-                <td>{text(calculated.queryHoldDays ?? '-')}d</td>
-                <td>
-                  <span className={`rft ${calculated.rft === 'RFT' ? 'yes' : 'no'}`}>
-                    {text(calculated.rft || '-')}
-                  </span>
-                </td>
-                <td>{text(calculated.netTat ?? '-')}d</td>
-                <td>{text(calculated.touchCount)}</td>
-                <td>
-                  <button
+              <tr
+                key={text(row.referenceId)}
+                className="case-row"
+                tabIndex={0}
+                aria-label={`Open details for ${text(row.referenceId)}`}
+                onClick={() => onDetails(text(row.referenceId))}
+                onKeyDown={(event) => {
+                  if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) {
+                    event.preventDefault();
+                    onDetails(text(row.referenceId));
+                  }
+                }}
+              >
+                <td className="case-actions" onClick={(event) => event.stopPropagation()}>
+                  <a
                     className="text-btn"
-                    onClick={() => setDetails({ ...row, ...calculated })}
+                    href={routeHash('cases', text(row.referenceId))}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onDetails(text(row.referenceId));
+                    }}
                   >
                     Details
-                  </button>
+                  </a>
                   {user.role !== 'viewer' && (
                     <button className="text-btn" onClick={() => onEdit(row)}>
                       {['cse', 'mofsl'].includes(user.role) ? 'Add update' : 'Edit'}
                     </button>
                   )}
                 </td>
+                <td>
+                  <strong>{text(row.referenceId)}</strong>
+                  <small className="subline">{text(calculated.stage || row.stage)}</small>
+                </td>
+                <td>
+                  {text(row.clientName)}
+                  <small className="subline">
+                    {text(calculated.panMasked || row.panMasked || 'Protected')}
+                  </small>
+                </td>
+                <td>{formatDate(calculated.originalInwardDate || row.inwardDate)}</td>
+                <td>
+                  <Status value={row.status} />
+                </td>
+                <td>{text(calculated.queryCount ?? '-')}</td>
+                <td>
+                  <span className={`rft ${calculated.rft === 'RFT' ? 'yes' : 'no'}`}>
+                    {text(calculated.rft || '-')}
+                  </span>
+                </td>
+                <td>{text(calculated.netTat ?? '-')}d</td>
               </tr>
             );
           })}
         </Table>
       </Panel>
-      {details && <CaseDetails row={details} report={metrics} onClose={() => setDetails(null)} />}
+      {details && (
+        <CaseDetails
+          row={{ ...details, ...derived.get(details.caseId) }}
+          report={metrics}
+          entries={cases.filter((row) => row.caseId === details.caseId)}
+          history={history.filter((row) => text(row.referenceId) === text(details.referenceId))}
+          onEdit={user.role === 'viewer' ? undefined : () => onEdit(details)}
+          editLabel={['cse', 'mofsl'].includes(user.role) ? 'Add update' : 'Edit latest entry'}
+          onClose={() => onDetails(null)}
+        />
+      )}
+      {detailReference && !details && metrics && (
+        <p role="status">This case is unavailable or outside your access.</p>
+      )}
     </section>
   );
 }

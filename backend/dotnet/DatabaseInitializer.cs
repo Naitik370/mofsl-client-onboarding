@@ -12,6 +12,7 @@ public static class DatabaseInitializer
         Execute(db, File.ReadAllText(database.SchemaPath));
         var entryColumns = Query(db, "PRAGMA table_info(case_entries)").Select(row => row.Text("name")).ToHashSet();
         foreach (var (_, column) in EntryFields.Columns)
+            // Includes optional Current Stage overrides; existing entries remain automatically derived.
             if (!entryColumns.Contains(column))
                 Execute(db, $"ALTER TABLE case_entries ADD COLUMN {column} TEXT");
         var caseColumns = Query(db, "PRAGMA table_info(cases)").Select(row => row.Text("name")).ToHashSet();

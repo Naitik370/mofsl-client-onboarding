@@ -19,7 +19,9 @@ public static class StageMetrics
                 timeline.Add((date, e.Text("stage"), e.Number("id")));
         }
         foreach (var (field, stage) in new[] {
-            ("formPreparedDate", "Stage 2"), ("signedFormReceivedDate", "Stage 3"),
+            ("formPreparedDate", "Stage 2"), ("outwardDate", "Stage 2"),
+            ("physicalFormSubmittedDate", "Stage 2"), ("digitalFormSentDate", "Stage 2"),
+            ("signedFormReceivedDate", "Stage 3"),
             ("discrepancyResolutionReceivedDate", "Stage 4"), ("resubmittedFormReceivedDate", "Stage 4"),
             ("submittedToMofslDate", "Stage 5"), ("accountOpeningDate", "Stage 6") })
             if (dates.TryGetValue(field, out var value) && Date(value) is { } day && day <= end && (inward is null || day >= inward))

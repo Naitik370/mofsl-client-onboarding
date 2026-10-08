@@ -9,6 +9,8 @@ public static class CaseValidator
     public static List<string> Validate(Dictionary<string, object?> payload, SqliteConnection db, long? entryId)
     {
         var errors = new List<string>();
+        if (payload.Text("stageOverride") != "" && !Enumerable.Range(1, 6).Select(i => $"Stage {i}").Contains(payload.Text("stageOverride")))
+            errors.Add("Current stage override must be Stage 1 to Stage 6");
         foreach (var (field, label) in new[] { ("referenceId", "Reference ID"), ("requestId", "Request ID"), ("clientName", "Client name"), ("pan", "PAN No"), ("inwardDate", "Inward date") })
             if (payload.Text(field) == "")
                 errors.Add($"{label} is required");

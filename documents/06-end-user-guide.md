@@ -36,16 +36,31 @@ Open `http://127.0.0.1:4173/` and sign in with your assigned account. Keep your 
 
 The application validates the request, generates a Reference ID in the format `MOFSL-YYYYMMDD-XXXXXXXX`, creates the case and its first entry, and adds the initial status-history event.
 
+For CSE users, saving a New entry automatically sets the status to `Under Review by Operations` and assigns it to Operations.
+
 ## Add activity to an existing case
 
 The Reference ID must remain unchanged throughout the journey.
 
+Case Register shows one row per Reference ID with the latest saved status and case-level metrics. Select a row or **Details** to open its saved entry history and append-only status history. **Edit** updates the latest entry; **Add update** creates a related entry for CSE/MOFSL. Actions stay pinned on the left when the table scrolls.
+
+The form groups fields into **Client**, **Assignment**, **Status & dates**, and **Notes**. Latest Status options are grouped by stage. Fields follow the selected stage; hidden values remain saved. Errors appear below their fields, and keyboard focus moves to the first invalid field. **Cancel** returns an existing entry to the register; **Clear** resets a new form. Leaving a changed form asks before discarding it.
+
+Navigation uses URLs such as `#/cases` and `#/cases/MOFSL-20260808-06B20049`. Copy a case's **Details** link to share it with another authorized user. Refresh preserves the screen and case, and browser Back moves through the app's visited screens. Refreshing a changed form uses the browser's unsaved-change warning; drafts are not saved automatically.
+
 - Admin or Operations can select **Edit** to change the existing operational entry, or create a new related entry using `Resubmission`, `Discrepancy Resolution`, or `Modification`.
 - CSE and MOFSL select **Add update**. The form copies the current case data but saves a new related entry rather than overwriting the old one.
+- When Operations has selected `Query Raised to CSE - Missing Information`, the CSE update automatically selects `Resubmission` and `Resubmitted by CSE`. Saving keeps the existing Reference ID and closes the query hold interval.
 - A non-`New` entry is rejected when its Reference ID does not already exist.
 - Users cannot supply the Reference ID for a `New` entry; the application generates it when you save.
 
 ## Handle the normal case journey
+
+The entry form enables **Update status from newly entered process dates and review outcome** by default. On save, the API selects the latest newly entered action date: form preparation, physical/digital form submission, signed-form receipt, discrepancy resolution/resubmitted-form receipt, MOFSL submission/query resolution, account opening, or communication sent. **Found in Order** in Stage 4 selects readiness for MOFSL. Copied dates do not trigger another transition. Account opening and closure require both the opening date and account number.
+
+Selecting **Latest status** manually switches automatic selection off. Use that dropdown for query creation, review initiation, On Hold, Rejected, and Cancelled. Query statuses require event details. CSE replies to a missing-information query automatically use Resubmission; replies to a discrepancy/returned form automatically use Discrepancy Resolution.
+
+**Current Stage** is calculated from the furthest populated process field and the status's mapped stage. Admin and Operations can set **Current Stage override**, or clear it to restore automatic calculation. This changes stage filtering and the pipeline, while audit history and access permissions continue to follow the actual status. Stage TAT uses dated events and process dates; changing the stage override does not rewrite elapsed time.
 
 ```text
 Request received
@@ -117,7 +132,7 @@ CSV date columns accept `DD-MM-YYYY` or `YYYY-MM-DD`.
 - **MIS Overview** shows workload, closures, RFT, TAT, SLA, exceptions, pipeline, and attention cases.
 - **Performance MIS** groups results by CSE, Location, or Vertical/Segment.
 - Date filters use the earliest inward date for each Reference ID.
-- **Case Register** shows individual entries with case-level derived metrics.
+- **Case Register** shows each case once, with its latest status and case-level derived metrics. Details contains entry and status history.
 - **Audit History** shows timestamp, old/new status, stage, authenticated changer, owner, and notes.
 
 PAN is masked in reports. Management Viewer also receives masked PAN in the register.
@@ -137,10 +152,10 @@ PAN is masked in reports. Management Viewer also receives masked PAN in the regi
 
 ## Business dates, case details, and SLA
 
-Date fields follow the stage derived from Latest status. Stage 2 dispatch dates also follow the Physical/Digital channel; the form-return date appears for Physical cases. Inward date and Status business date remain available in every stage. Select Show all process dates to inspect or correct dates from other stages. Switching stage or hiding a date does not clear its value. Exception statuses show the common dates unless Show all process dates is selected. Dates are optional unless required by the selected status; they are not automatically filled by switching stages.
+Date fields follow the stage derived from Latest status. Stage 2 dispatch dates also follow the Physical/Digital channel; the form-return date appears for Physical cases. Inward date and Status business date remain available in every stage. When editing or adding activity to an existing case, select Show all process dates to inspect or correct dates from other stages. The checkbox is hidden for new cases. Switching stage or hiding a date does not clear its value. Exception statuses show the common dates unless Show all process dates is selected. Dates are optional unless required by the selected status; they are not automatically filled by switching stages.
 
 Status business date records when the selected status happened, independently of the audit recording time. Discrepancy type and Stage 4 review outcome have controlled dropdown values.
 
 Touch Count is automatic: each successful new entry or edit counts once, including unchanged-status edits. Viewing and rejected saves do not count. Old records show a minimum baseline from saved entries.
 
-Choose Details in Case Register for dates, touches, original inward, resubmissions, overall and stage timing, SLA, and query attribution. Skipped stages show Not observed. Admin can configure SLA Settings; all thresholds use gross working days and default to seven.
+Choose Details in Case Register to open a right sidebar showing dates, touches, original inward, resubmissions, overall and stage timing, SLA, and query attribution. Close it with Close details, Escape, or a click outside the sidebar. Skipped stages show Not observed. Admin can configure SLA Settings; all thresholds use gross working days and default to seven.

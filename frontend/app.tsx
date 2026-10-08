@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { type Row } from './lib';
 import { useWorkspace } from './useWorkspace';
@@ -10,29 +10,54 @@ import { UserAdministration } from './components/UserAdministration';
 import { SlaSettings } from './components/SlaSettings';
 import { Errors } from './components/shared';
 import './styles.css';
-
-const titles = {
-  dashboard: 'MIS Overview',
-  analysis: 'Performance MIS',
-  cases: 'Case Register',
-  entry: 'New Entry',
-  upload: 'Bulk Upload',
-  history: 'Audit History',
-  users: 'User Administration',
-  settings: 'SLA Settings',
-};
-type View = keyof typeof titles;
+import { parseRoute, routeHash, viewTitles as titles, type View } from './navigation';
 
 /** Coordinates navigation; each screen owns its presentation and editable state. */
 function App() {
   const workspace = useWorkspace();
-  const [view, setView] = useState<View>('dashboard');
-  const [selected, setSelected] = useState<Row | null>(null);
+  const [route, setRoute] = useState(() => parseRoute(window.location.hash));
+  const { view } = route;
+  const dirty = useRef(false);
+  const currentHash = useRef(window.location.hash || '#/dashboard');
   const [entryVersion, setEntryVersion] = useState(0);
   const [toast, setToast] = useState('');
   const [signingOut, setSigningOut] = useState(false);
   const [actionError, setActionError] = useState('');
   const { user, meta, report, metrics, cases, history, users, handleError } = workspace;
+  const selected =
+    route.view === 'entry' && route.referenceId
+      ? cases.find(
+          (row) => String(row.referenceId).toLowerCase() === route.referenceId?.toLowerCase(),
+        ) || null
+      : null;
+
+  useEffect(() => {
+    const onHashChange = () => {
+      if (dirty.current && !window.confirm('Discard unsaved changes?')) {
+        window.history.pushState(null, '', currentHash.current);
+        return;
+      }
+      dirty.current = false;
+      currentHash.current = window.location.hash;
+      setRoute(parseRoute(window.location.hash));
+      setEntryVersion((version) => version + 1);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  function discardChanges() {
+    if (dirty.current && !window.confirm('Discard unsaved changes?')) return false;
+    dirty.current = false;
+    return true;
+  }
+
+  function navigate(nextView: View, referenceId: string | null = null) {
+    const hash = routeHash(nextView, referenceId);
+    if (hash === window.location.hash) return;
+    if (!discardChanges()) return;
+    window.location.hash = hash;
+  }
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -44,12 +69,11 @@ function App() {
   }, [toast]);
 
   function openEntry(row: Row | null = null) {
-    setSelected(row);
-    setEntryVersion((version) => version + 1);
-    setView('entry');
+    navigate('entry', row ? String(row.referenceId) : null);
   }
 
   async function signOut() {
+    if (!discardChanges()) return;
     setSigningOut(true);
     try {
       await workspace.signOut();
@@ -76,8 +100,6 @@ function App() {
         onError={handleError}
         onSignIn={async (credentials) => {
           await workspace.signIn(credentials);
-          setView('dashboard');
-          setSelected(null);
           setToast('');
           setActionError('');
         }}
@@ -111,7 +133,7 @@ function App() {
                 key={name}
                 className={`nav-item ${view === name ? 'active' : ''}`}
                 aria-current={view === name ? 'page' : undefined}
-                onClick={() => (name === 'entry' ? openEntry() : setView(name))}
+                onClick={() => (name === 'entry' ? openEntry() : navigate(name))}
               >
                 {titles[name]}
               </button>
@@ -177,23 +199,39 @@ function App() {
               meta={meta}
               user={user}
               onEdit={openEntry}
+              detailReference={route.referenceId}
+              onDetails={(reference) => navigate('cases', reference)}
+              history={history}
             />
           )}
-          {view === 'entry' && canWrite && report && (
+          {view === 'entry' && canWrite && report && (!route.referenceId || selected) && (
             <CaseEntry
               key={entryVersion}
               user={user}
               meta={meta}
               cases={cases}
               selected={selected}
-              onClear={() => openEntry()}
+              onDirtyChange={(value) => {
+                dirty.current = value;
+              }}
+              onClear={() => {
+                if (selected) navigate('cases');
+                else if (discardChanges()) setEntryVersion((version) => version + 1);
+              }}
               onError={handleError}
               onSaved={async (saved) => {
                 await workspace.reload();
-                setView('cases');
+                dirty.current = false;
+                navigate('cases');
                 setToast(`Entry saved · ${saved.referenceId}`);
               }}
             />
+          )}
+          {view === 'entry' && report && route.referenceId && !selected && (
+            <p role="status">This case is unavailable or outside your access.</p>
+          )}
+          {!permittedViews.includes(view) && (
+            <p role="status">You do not have access to this screen.</p>
           )}
           {view === 'entry' && !report && <p role="status">Loading case metadata...</p>}
           {view === 'upload' && canBulk && (

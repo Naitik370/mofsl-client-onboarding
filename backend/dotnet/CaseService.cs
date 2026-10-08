@@ -54,14 +54,15 @@ public sealed class CaseService(Database database, TimeProvider clock)
         using var db = database.Open();
         using var transaction = db.BeginTransaction();
 
-        if (entryId is null && payload.Text("entryType") == "New")
-        {
-            if (payload.Text("inwardDate") == "")
-                payload["inwardDate"] = now[..10];
-            payload["referenceId"] = GenerateReferenceId(db, now);
-        }
-
         var context = AccessContext(db, payload.Text("referenceId"), entryId);
+        var previous = entryId is not null ? CaseQueries.CaseRows(db, entryId).FirstOrDefault()
+            : CaseQueries.CaseRows(db).FirstOrDefault(row => string.Equals(row.Text("referenceId"), payload.Text("referenceId"), StringComparison.OrdinalIgnoreCase));
+        if (user.Role is not ("admin" or "operations") && payload.ContainsKey("stageOverride")
+            && payload.Text("stageOverride") != (previous?.Text("stageOverride") ?? ""))
+            return (403, new
+            {
+                errors = new[] { "Only Admin or Operations can override Current Stage" }
+            });
         var accessErrors = CaseAccessPolicy.AccessErrors(payload, user, context);
         if (accessErrors.Count > 0)
             return (403, new
@@ -69,7 +70,37 @@ public sealed class CaseService(Database database, TimeProvider clock)
                 errors = accessErrors
             });
 
+        if (user.Role == "cse")
+        {
+            if (context?.Text("status") == "Query Raised to CSE - Missing Information")
+            {
+                payload["entryType"] = "Resubmission";
+                payload["status"] = "Resubmitted by CSE";
+            }
+            else if (context?.Text("status") is "Discrepancy Raised to CSE" or "Form Returned to CSE")
+            {
+                payload["entryType"] = "Discrepancy Resolution";
+                payload["status"] = "Discrepancy Resolution Received";
+            }
+            else if (entryId is null && payload.Text("entryType") == "New")
+                payload["status"] = "Under Review by Operations";
+        }
+
+        if (entryId is null && payload.Text("entryType") == "New")
+        {
+            if (payload.Text("inwardDate") == "")
+                payload["inwardDate"] = now[..10];
+            payload["referenceId"] = GenerateReferenceId(db, now);
+        }
+
         PreserveAdditionalFields(db, payload, entryId);
+        StatusAutomation.Apply(payload, previous);
+        accessErrors = CaseAccessPolicy.AccessErrors(payload, user, context);
+        if (accessErrors.Count > 0)
+            return (403, new
+            {
+                errors = accessErrors
+            });
         var validationErrors = CaseValidator.Validate(payload, db, entryId);
         if (validationErrors.Count > 0)
             return (400, new
@@ -144,7 +175,7 @@ public sealed class CaseService(Database database, TimeProvider clock)
     private static Dictionary<string, object?>? AccessContext(SqliteConnection db, string referenceId, long? entryId)
     {
         const string sql = """
-            SELECT c.cse_name AS cseName, sm.stage FROM case_entries e
+            SELECT c.cse_name AS cseName, sm.stage, sm.status_name AS status FROM case_entries e
             JOIN cases c ON c.id=e.case_id JOIN status_master sm ON sm.id=e.latest_status_id
             """;
         var condition = entryId is null
@@ -261,7 +292,8 @@ public sealed class CaseService(Database database, TimeProvider clock)
     {
         if (payload.Text("statusDate") != "")
             return payload.Text("statusDate");
-        if (payload.Text("status") == "Request Received from CSE")
+        if (payload.Text("status") == "Request Received from CSE"
+            || payload.Text("status") == "Under Review by Operations" && payload.Text("entryType") == "New")
             return payload.Text("inwardDate");
         if (ProcessDateFields.TryGetValue(payload.Text("status"), out var field) && payload.Text(field) != "")
             return payload.Text(field);

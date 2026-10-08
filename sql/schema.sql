@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS case_entries (
     stage1_query_details TEXT,
     discrepancy_type TEXT,
     stage4_review_outcome TEXT,
+    stage_override TEXT,
     mofsl_query_type TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL

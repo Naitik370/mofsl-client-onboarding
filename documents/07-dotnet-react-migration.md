@@ -10,11 +10,13 @@ The active runtime is ASP.NET Core on .NET 10 with a React 19 frontend built by 
 | `backend/dotnet/ApiEndpoints.cs`, `ApiSessionMiddleware.cs` | REST routes, session authorization, cookies, JSON errors |
 | `backend/dotnet/AuthenticationService.cs`, `UserService.cs` | Login, sessions, password hashing, user administration |
 | `backend/dotnet/CaseService.cs`, `CaseAccessPolicy.cs`, `CaseValidator.cs` | Transactional case writes, role permissions, validation |
+| `backend/dotnet/StatusAutomation.cs` | Completed-action status inference and field-derived Current Stage |
 | `backend/dotnet/ReportService.cs`, `CaseQueries.cs` | Report aggregation and shared case read queries |
 | `backend/dotnet/Domain.cs` | Working days, query holds, normalization, PAN masking, seeds |
 | `backend/dotnet/Database.cs`, `DatabaseInitializer.cs` | SQLite connections, parameterized SQL, initialization and migrations |
 | `backend/tests/ApiTests.cs` | Business rules and HTTP integration tests with isolated SQLite databases |
 | `frontend/app.tsx`, `useWorkspace.ts` | Navigation, session state, API snapshot loading |
+| `frontend/navigation.ts` | Hash route parsing and screen/case links |
 | `frontend/components/` | Focused screens, local form state, shared display components |
 | `frontend/lib.ts` | Typed requests, validation, CSV parsing and templates |
 | `frontend/styles.css` | Existing responsive styling |
@@ -65,9 +67,13 @@ The six-stage status mappings, Reference ID generation, append-only history, que
 
 React uses component state and JSX. CSE/MOFSL updates create related entries; Admin/Operations can edit existing entries. Register metrics come from an unfiltered report even when the MIS period is filtered. CSV supports quoted multiline fields and DD-MM-YYYY dates. Each imported row uses the ordinary case endpoint; successful rows remain marked imported, and later failures remain visible. Bulk import is not atomic.
 
+The register groups API entries by Reference ID and selects the latest `updatedAt`, with entry ID breaking ties, matching the server's latest-case selection. It displays one row per case; the details drawer retains all entry and status history. Hash routes preserve screen/case navigation across refresh and Back. Stage-specific form fields preserve hidden values, and selecting a manual status continues to disable status inference. Errors retain the API's message array for field-level display. The form's edit target is fixed when opened so a concurrent refresh cannot change which entry receives a save.
+
 ## Process dates, touches, and stage reporting
 
 Dedicated stage dates, discrepancy type, Stage 4 review outcome, and query detail fields are saved with entries. Status history stores business dates separately from recording timestamps. Touch Count is incremented by each successful save, including same-status edits; earlier saved entries form a minimum legacy baseline. Reports expose six stage TAT values, per-stage SLA flags, and Stage 1/3/5 and CSE/MOFSL query attribution. Case Details displays the metrics and dates. Admin can configure overall and stage SLA in SLA Settings.
+
+New process dates can infer completed-action statuses, subject to ordinary role permissions and validation. An explicit status selection disables inference. The request-only `autoStatus` flag enables or disables inference for that save; it is not a persisted calculation field. Current Stage derives from the furthest populated process field and the status stage, with an optional `stage_override` on each entry. The existing EntryFields migration adds this nullable column to older databases. Status-stage authorization and event-based TAT remain independent of this display/MIS override. CSE query and discrepancy replies automatically select the corresponding related-entry type and resolution status.
 
 ## Existing data and authentication
 

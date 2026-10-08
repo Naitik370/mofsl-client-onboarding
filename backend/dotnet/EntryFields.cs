@@ -21,6 +21,7 @@ public static class EntryFields
     };
     public static readonly Dictionary<string, string> Text = new()
     {
+        ["stageOverride"] = "stage_override",
         ["stage1QueryDetails"] = "stage1_query_details",
         ["discrepancyType"] = "discrepancy_type",
         ["stage4ReviewOutcome"] = "stage4_review_outcome",

@@ -21,6 +21,198 @@ public sealed class ApiTests : IDisposable
     }
 
     [Fact]
+    public void ProcessDatesAdvanceStatusesAndManualChoicesAndHistoricalDatesRemainAuthoritative()
+    {
+        var payload = Base();
+        var created = Json(cases.SaveCase(payload, Operations).Body);
+        var id = created.GetProperty("id").GetInt64();
+        payload["referenceId"] = created.GetProperty("referenceId").GetString();
+        payload["entryType"] = "Modification";
+        foreach (var (field, status, day) in new[] {
+            ("formPreparedDate", "Application Form Under Preparation", "2026-07-02"),
+            ("physicalFormSubmittedDate", "Physical Form Submitted to CSE", "2026-07-03"),
+            ("signedFormDate", "Signed Form Received from CSE", "2026-07-06"),
+            ("discrepancyResolutionReceivedDate", "Discrepancy Resolution Received", "2026-07-07"),
+            ("resubmittedFormReceivedDate", "Resubmitted Form Received - Under Review", "2026-07-08"),
+            ("submittedDate", "Submitted to MOFSL", "2026-07-09"),
+            ("mofslQueryResolvedDate", "Query Resolved - Resubmitted to MOFSL", "2026-07-10"),
+            ("accountOpeningDate", "Account Opened", "2026-07-13"),
+            ("communicationSentDate", "Communication Sent - Case Closed", "2026-07-14") })
+        {
+            if (field == "accountOpeningDate")
+                payload["accountNumber"] = "AC-1";
+            payload[field] = day;
+            var result = cases.SaveCase(payload, Operations, id);
+            Assert.Equal(200, result.Status);
+            var saved = Json(result.Body);
+            Assert.Equal(status, saved.GetProperty("status").GetString());
+            Assert.Equal(day, Json(cases.GetHistory(Operations))[0].GetProperty("businessDate").GetString());
+            payload["status"] = status;
+            payload["statusDate"] = day;
+        }
+        // Closed cases do not regress when a historical date is corrected.
+        payload["formPreparedDate"] = "2026-07-03";
+        Assert.Equal("Communication Sent - Case Closed", Json(cases.SaveCase(payload, Operations, id).Body).GetProperty("status").GetString());
+        payload["status"] = "On Hold";
+        payload["submittedDate"] = "2026-07-15";
+        payload["autoStatus"] = true;
+        Assert.Equal("On Hold", Json(cases.SaveCase(payload, Operations, id).Body).GetProperty("status").GetString());
+        payload["status"] = "Under Review - Signed Form";
+        payload["autoStatus"] = false;
+        Assert.Equal("Under Review - Signed Form", Json(cases.SaveCase(payload, Operations, id).Body).GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public void AutomaticStatusValidatesQueriesClosureChannelsAndRolePermissions()
+    {
+        var digital = Base();
+        digital["channel"] = "Digital";
+        digital["outwardDate"] = "2026-07-02";
+        Assert.Equal("Digital Form Sent to Client", Json(cases.SaveCase(digital, Operations).Body).GetProperty("status").GetString());
+        var payload = Base();
+        payload["accountOpeningDate"] = "2026-07-02";
+        // A date without the account number does not prove that an account was opened.
+        var incomplete = Json(cases.SaveCase(payload, Operations).Body);
+        Assert.Equal("Request Received from CSE", incomplete.GetProperty("status").GetString());
+        payload["accountNumber"] = "AC-1";
+        Assert.Equal("Account Opened", Json(cases.SaveCase(payload, Operations, incomplete.GetProperty("id").GetInt64()).Body).GetProperty("status").GetString());
+        payload = Base("Discrepancy Resolution Received");
+        var saved = Json(cases.SaveCase(payload, Operations).Body);
+        payload["stage4ReviewOutcome"] = "Found in Order";
+        Assert.Equal("Form Found in Order - Ready for MOFSL Submission", Json(cases.SaveCase(payload, Operations, saved.GetProperty("id").GetInt64()).Body).GetProperty("status").GetString());
+        payload = Base();
+        payload["stage1QueryRaisedDate"] = "2026-07-02";
+        Assert.Equal("Request Received from CSE", Json(cases.SaveCase(payload, Operations).Body).GetProperty("status").GetString());
+        payload["status"] = "Query Raised to CSE - Missing Information";
+        Assert.Equal(400, cases.SaveCase(payload, Operations).Status);
+        payload = Base();
+        payload["submittedDate"] = "2026-07-02";
+        Assert.Equal(403, cases.SaveCase(payload, new User(3, "cse", "CSE Demo", "cse")).Status);
+        Assert.Equal(403, cases.SaveCase(payload, new User(5, "viewer", "Viewer", "viewer")).Status);
+    }
+
+    [Fact]
+    public void CseDiscrepancyRepliesAutomaticallyResolveAndRetainStageOverrides()
+    {
+        var payload = Base("Discrepancy Raised to CSE");
+        payload["queryDetails"] = "Signature mismatch";
+        payload["statusDate"] = "2026-07-02";
+        payload["stageOverride"] = "Stage 3";
+        var first = Json(cases.SaveCase(payload, Operations).Body);
+        payload["referenceId"] = first.GetProperty("referenceId").GetString();
+        payload["entryType"] = "Resubmission";
+        payload["status"] = "Resubmitted by CSE";
+        payload["statusDate"] = "2026-07-03";
+        payload.Remove("stageOverride");
+        var response = cases.SaveCase(payload, new User(3, "cse", "CSE Demo", "cse"));
+        Assert.Equal(201, response.Status);
+        var saved = Json(response.Body);
+        Assert.Equal("Discrepancy Resolution", saved.GetProperty("entryType").GetString());
+        Assert.Equal("Discrepancy Resolution Received", saved.GetProperty("status").GetString());
+        Assert.Equal("Stage 3", saved.GetProperty("stageOverride").GetString());
+        var row = Json(reports.Report("", "", "location", Operations)).GetProperty("cases")[0];
+        Assert.Equal(1, row.GetProperty("queryHoldDays").GetInt32());
+        Assert.Equal("Stage 4", row.GetProperty("derivedStage").GetString());
+    }
+
+    [Fact]
+    public void CurrentStageUsesPopulatedFieldsAndAuthorizedPersistedOverride()
+    {
+        var payload = Base("Under Review by Operations");
+        payload["autoStatus"] = false;
+        payload["signedFormDate"] = "2026-07-03";
+        payload["stage"] = "Stage 6";
+        var saved = Json(cases.SaveCase(payload, Operations).Body);
+        var id = saved.GetProperty("id").GetInt64();
+        Assert.Equal("Under Review by Operations", saved.GetProperty("status").GetString());
+        Assert.Equal("Stage 3", saved.GetProperty("stage").GetString());
+        Assert.Equal("Stage 1", saved.GetProperty("statusStage").GetString());
+        payload["stageOverride"] = "Stage 2";
+        Assert.Equal("Stage 2", Json(cases.SaveCase(payload, Operations, id).Body).GetProperty("stage").GetString());
+        database.Initialize();
+        Assert.Equal("Stage 2", Json(cases.GetCases(Operations))[0].GetProperty("stage").GetString());
+        payload["stageOverride"] = "Stage 9";
+        Assert.Equal(400, cases.SaveCase(payload, Admin, id).Status);
+        payload["stageOverride"] = "Stage 5";
+        payload["referenceId"] = saved.GetProperty("referenceId").GetString();
+        payload["entryType"] = "Resubmission";
+        payload["status"] = "Resubmitted by CSE";
+        Assert.Equal(403, cases.SaveCase(payload, new User(3, "cse", "CSE Demo", "cse")).Status);
+        payload["status"] = "Under Review by Operations";
+        Assert.Equal(200, cases.SaveCase(payload, Operations, id).Status);
+        Assert.Empty(Json(cases.GetCases(new User(4, "mofsl", "MOFSL Demo", "mofsl"))).EnumerateArray());
+        payload["stageOverride"] = "";
+        Assert.Equal("Stage 3", Json(cases.SaveCase(payload, Operations, id).Body).GetProperty("stage").GetString());
+        Assert.Equal("Stage 3", Json(reports.Report("", "", "location", Operations)).GetProperty("cases")[0].GetProperty("stage").GetString());
+        var mofsl = new User(4, "mofsl", "MOFSL Demo", "mofsl");
+        payload["stageOverride"] = "Stage 6";
+        payload["status"] = "Account Opened";
+        payload["accountOpeningDate"] = "2026-07-06";
+        payload["accountNumber"] = "AC-1";
+        Assert.Equal(403, cases.SaveCase(payload, mofsl).Status);
+    }
+
+    [Fact]
+    public void HistoricalCorrectionsDoNotRegressAutomaticStatusAndStageDatesStillDriveTat()
+    {
+        var payload = Base();
+        payload["physicalFormSubmittedDate"] = "2026-07-02";
+        payload["signedFormDate"] = "2026-07-06";
+        var first = Json(cases.SaveCase(payload, Operations).Body);
+        payload["status"] = first.GetProperty("status").GetString();
+        payload["statusDate"] = first.GetProperty("statusDate").GetString();
+        payload["formPreparedDate"] = "2026-07-03";
+        var second = cases.SaveCase(payload, Operations, first.GetProperty("id").GetInt64());
+        Assert.Equal(200, second.Status);
+        Assert.Equal("Signed Form Received from CSE", Json(second.Body).GetProperty("status").GetString());
+        var clock = new FixedClock(new DateTimeOffset(2026, 7, 10, 12, 0, 0, TimeSpan.Zero));
+        var row = Json(new ReportService(database, clock).Report("", "", "location", Operations)).GetProperty("cases")[0];
+        Assert.Equal(2, row.GetProperty("stageTat").GetProperty("Stage 2").GetInt32());
+        Assert.Equal(4, row.GetProperty("stageTat").GetProperty("Stage 3").GetInt32());
+        cases.SaveCase(Base("Rejected"), Operations);
+        cases.SaveCase(Base("Cancelled by Client"), Operations);
+        var rejected = Json(new ReportService(database, clock).Report("", "", "location", Operations)).GetProperty("cases").EnumerateArray().Where(item => item.GetProperty("status").GetString() is "Rejected" or "Cancelled by Client");
+        Assert.All(rejected, item => Assert.Equal(0, item.GetProperty("aging").GetInt32()));
+    }
+
+    [Fact]
+    public void CseSubmissionAutomaticallyRoutesToReviewAndResolvesMissingInformationQuery()
+    {
+        var cse = new User(3, "cse", "CSE Demo", "cse");
+        var payload = Base();
+        var first = cases.SaveCase(payload, cse);
+        Assert.Equal(201, first.Status);
+        var created = Json(first.Body);
+        Assert.Equal("Under Review by Operations", created.GetProperty("status").GetString());
+        Assert.Equal("2026-07-01", Json(cases.GetHistory(cse))[0].GetProperty("businessDate").GetString());
+        payload["referenceId"] = created.GetProperty("referenceId").GetString();
+        payload["status"] = "Query Raised to CSE - Missing Information";
+        payload["queryDetails"] = "Missing proof";
+        payload["statusDate"] = "2026-07-02";
+        Assert.Equal(200, cases.SaveCase(payload, Operations, created.GetProperty("id").GetInt64()).Status);
+        payload["status"] = "Submitted to MOFSL";
+        Assert.Equal(403, cases.SaveCase(payload, cse).Status);
+        payload["status"] = "Request Received from CSE";
+        Assert.Equal(403, cases.SaveCase(payload, new User(6, "other-cse", "Another CSE", "cse")).Status);
+        payload["statusDate"] = "2026-07-03";
+        // A stale New entry type must still reuse the queried case.
+        var result = cases.SaveCase(payload, cse);
+        Assert.Equal(201, result.Status);
+        var submitted = Json(result.Body);
+        Assert.Equal(created.GetProperty("referenceId").GetString(), submitted.GetProperty("referenceId").GetString());
+        Assert.Equal("Resubmission", submitted.GetProperty("entryType").GetString());
+        Assert.Equal("Resubmitted by CSE", submitted.GetProperty("status").GetString());
+        Assert.Equal("Operations", submitted.GetProperty("owner").GetString());
+        var history = Json(cases.GetHistory(cse));
+        Assert.Equal(3, history.GetArrayLength());
+        Assert.Equal("CSE Demo", history[0].GetProperty("changedBy").GetString());
+        var report = Json(reports.Report("", "", "location", Operations)).GetProperty("cases")[0];
+        Assert.Equal(1, report.GetProperty("queryCount").GetInt32());
+        Assert.Equal(1, report.GetProperty("queryHoldDays").GetInt32());
+        Assert.Equal("NRFT", report.GetProperty("rft").GetString());
+    }
+
+    [Fact]
     public void NewInwardDateUsesServerClockAndPreservesExplicitAndExistingDates()
     {
         var service = new CaseService(database, new FixedClock(new DateTimeOffset(2026, 7, 10, 10, 0, 0, TimeSpan.Zero)));
@@ -565,7 +757,8 @@ public sealed class ApiTests : IDisposable
             payload["accountOpeningDate"] = "2026-07-20";
             var (status, saved) = cases.SaveCase(payload, Operations);
             Assert.Equal(201, status);
-            Assert.Equal(stage, Json(saved).GetProperty("stage").GetString());
+            Assert.Equal(stage, Json(saved).GetProperty("statusStage").GetString());
+            Assert.Equal("Stage 6", Json(saved).GetProperty("derivedStage").GetString());
         }
         var report = Json(reports.Report("", "", "cseName", Operations));
         var row = report.GetProperty("cases")[0];

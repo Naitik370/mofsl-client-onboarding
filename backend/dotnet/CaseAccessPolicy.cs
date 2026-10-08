@@ -7,7 +7,7 @@ public static class CaseAccessPolicy
     public static List<Dictionary<string, object?>> Visible(IEnumerable<Dictionary<string, object?>> rows, User user) => rows.Where(row => user.Role switch
     {
         "cse" => string.Equals(row.Text("cseName"), user.DisplayName, StringComparison.OrdinalIgnoreCase),
-        "mofsl" => row.Text("owner") == "MOFSL" || row.Text("stage") is "Stage 5" or "Stage 6",
+        "mofsl" => row.Text("owner") == "MOFSL" || (row.ContainsKey("statusStage") ? row.Text("statusStage") : row.Text("stage")) is "Stage 5" or "Stage 6",
         _ => true
     }).ToList();
 

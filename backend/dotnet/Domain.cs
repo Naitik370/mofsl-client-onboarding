@@ -15,7 +15,7 @@ public static class Domain
     public static readonly string[] Owners = ["Operations", "CSE", "MOFSL"];
     public static readonly string[] Closed = ["Account Opened", "Communication Sent - Case Closed"];
     public static readonly string[] Excluded = ["Rejected", "Cancelled by Client"];
-    public static readonly string[] CseStatuses = ["Request Received from CSE", "Resubmitted by CSE", "Discrepancy Resolution Received", "Resubmitted Form Received - Under Review"];
+    public static readonly string[] CseStatuses = ["Request Received from CSE", "Under Review by Operations", "Resubmitted by CSE", "Discrepancy Resolution Received", "Resubmitted Form Received - Under Review"];
     public static readonly string[] MofslStatuses = ["Query Raised by MOFSL", "Query Resolved - Resubmitted to MOFSL", "Account Opened", "Communication Sent - Case Closed"];
     public static readonly Status[] Statuses = [
         new("Request Received from CSE", "Stage 1"), new("Under Review by Operations", "Stage 1"),
