@@ -1,13 +1,12 @@
 # MOFSL Client Onboarding
 
-A multi-user onboarding register and MIS for tracking client requests through a six-stage workflow. The application provides API-generated Reference IDs, role-controlled updates, append-only audit history, bulk upload, and Python-calculated RFT, query hold, TAT, SLA, and exception reporting.
+A multi-user onboarding register and MIS built with React and an ASP.NET Core REST API. The API persists records in SQLite and calculates RFT, query hold, working-day TAT, SLA, and exception reports across the six-stage workflow.
 
 ## Run locally
 
 ```powershell
 git clone git@github.com:Naitik370/mofsl-client-onboarding.git
 cd mofsl-client-onboarding
-python -m pip install -r requirements.txt
 npm install
 npm run build
 npm start
@@ -15,11 +14,23 @@ npm start
 
 Open [http://127.0.0.1:4173/](http://127.0.0.1:4173/). For later runs, use `npm start`; press `Ctrl+C` to stop the server.
 
+Prerequisites: Node.js 22.12+ and the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). The npm scripts detect a normal SDK installation or the local Windows installation at `%LOCALAPPDATA%/mofsl-dotnet`. Set `MOFSL_DOTNET` to use a different dotnet executable.
+
+For frontend hot reload, keep `npm start` running and run `npm run dev` in another terminal. Open [http://127.0.0.1:5173/](http://127.0.0.1:5173/); Vite proxies `/api` to ASP.NET Core.
+
 ## Demo data
 
 The committed `sql/onboarding.db` contains 56 demonstration cases and loads automatically when the server starts. Application and API changes are saved to this file. Removing it creates a fresh database with master data and demo users, but without the demonstration cases.
 
 ## Project guides
+
+[Document alignment and final sanity check](documents/08-specification-audit.md) records the supported fields, calculations, and remaining limitations.
+
+[PDF application and code walkthrough](output/pdf/client-onboarding-walkthrough.pdf) is a 25-page reading copy covering setup, roles, the six stages, save flow, MIS, and source references. It reflects the verified `final-demo` working tree on 8 October 2026.
+
+[Interactive code and user-flow guide](documents/client-onboarding-flow.html) explains the application from startup through the six stages, saves, audit, and MIS. Click any segment to open a sidebar with its user actions and the exact source blocks, file names, and line numbers. It works offline; regenerate it with `npm run guide` after editing code.
+
+[Migration, API contracts, and deployment](documents/07-dotnet-react-migration.md) describes the active React/.NET implementation and compatibility with existing data.
 
 These relative links open the standalone HTML documentation stored in this repository:
 

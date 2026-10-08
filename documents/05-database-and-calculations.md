@@ -1,87 +1,28 @@
----
-title: Database and Calculations
-tags: [client-onboarding, database, mis]
----
-
 # Database and calculations
 
-## Database tables
+SQLite stores role_master, users, sessions, cases, case_entries, status_history, status_master, location_master, segment_master, holiday_master, and settings. sql/schema.sql defines new databases; DatabaseInitializer applies additive migrations to older databases.
 
-| Table | One row represents |
+cases stores shared identity and automatic Touch Count. case_entries stores operational rows, the generic dates, dedicated stage dates, discrepancy type, Stage 4 review outcome, and separate Stage 1/MOFSL query details. status_history stores each status transition with its actor, recording timestamp, and optional business date.
+
+| Metric | Rule |
 | --- | --- |
-| `role_master` | One allowed role |
-| `users` | One login identity |
-| `sessions` | One server-side authenticated session |
-| `cases` | One API-generated stable Reference ID and its shared client metadata |
-| `case_entries` | One New, Resubmission, Discrepancy Resolution, or Modification row |
-| `status_history` | One actual status change |
-| `status_master` | One status, stage, query mapping, and classification |
-| `location_master` | One allowed location |
-| `segment_master` | One allowed segment |
-| `holiday_master` | One non-working holiday |
-| `settings` | One configuration value, currently `sla_days` |
+| Original inward | Earliest inward date under the Reference ID |
+| Resubmission count | Operational entry count minus one |
+| Touch Count | Successful creates and edits; reads and failed saves excluded |
+| Current stage | Latest Status mapped through Status Master |
+| Query count | Qualifying Stage 1/3/5 status-change events |
+| RFT | Zero qualifying events; any qualifying event produces NRFT |
+| Query hold | FIFO matched query/resolution intervals, using business dates when recorded |
+| Gross TAT | Original inward to opening for closed cases, otherwise today |
+| Net TAT | max(0, gross TAT minus query hold) |
+| Open aging | Original inward to today, independently of a prematurely entered opening date |
+| Stage TAT | Gross working days between stage changes, accumulated over repeat visits |
+| Overall/stage SLA | Gross TAT greater than configured threshold; default 7 working days |
 
-`cases.reference_id` is unique. Many `case_entries` and `status_history` rows can belong to the same case.
+Working days exclude the start date, include the end date, and omit weekends and Holiday Master dates. A skipped stage remains unknown. Stage 6 can run from opening to a recorded communication date. Stage timing uses business-date events and supplied milestone dates; undated historical events fall back to audit dates.
 
-## Latest case selection
+Query attribution separates Stage 1 missing-information queries, Stage 3 discrepancies/returns, and Stage 5 MOFSL queries, plus CSE-side and MOFSL-side totals. CSE-side means the query source classification, not proof of personal fault.
 
-For MIS, entries are grouped by `caseId`. The row with the greatest `(updatedAt, id)` is considered current. The earliest valid inward date across the group becomes `originalInwardDate`, and entry count minus one becomes `resubmissionCount`.
+Rejected/cancelled cases leave final RFT percentage and average-TAT denominators but remain exception counts. PAN is masked in reporting. SLA Settings is protected by Admin permissions.
 
-Date filters compare the requested period with this original inward date.
-
-## Working-day calculation
-
-`working_days(start, end, holidays)`:
-
-- Returns zero when either date is missing or end is not after start.
-- Counts dates after the start through the end.
-- Counts Monday through Friday only.
-- Excludes dates in `holiday_master`.
-
-## Query count and hold
-
-Query Count is the number of query-start history events, not a user-entered field. Starts and ends are paired by key (`stage1`, `stage3`, or `stage5`) in chronological order. Unmatched starts accumulate through today.
-
-## RFT and NRFT
-
-```text
-Query Count = 0  -> RFT
-Query Count > 0  -> NRFT
-```
-
-Therefore a qualifying query at any point permanently makes the reported case NRFT, even after resolution.
-
-## TAT, aging, and SLA
-
-```text
-Gross TAT = working days from original inward date
-            to account opening date, or today when not opened
-
-Net TAT   = max(0, Gross TAT - Query Hold Days)
-
-SLA breach = Gross TAT > configured SLA days
-```
-
-The configured default is seven working days.
-
-> [!important]
-> Current SLA breach uses **gross TAT**, not net TAT. Pipeline `aging` also uses gross TAT and becomes zero only for the two closed statuses.
-
-## Report exclusions
-
-Rejected and Cancelled by Client cases:
-
-- remain in total and exception counts;
-- are excluded from overall/group RFT denominators;
-- are excluded from average gross and net TAT;
-- are excluded from SLA breach totals.
-
-On Hold remains in the normal performance population.
-
-## PAN protection
-
-The report service replaces full PAN with `panMasked`, formatted like `AB*****34F`. Viewer register access also removes full PAN. Operational roles receive full PAN from `/api/cases`, while report responses never include it.
-
-## Process dates
-
-The report's `processDates` object is derived from status-history timestamps. These dates describe when the API recorded a status event. They are separate from manually supplied fields such as `outwardDate`, `resubmissionDate`, or `submittedDate` stored on the entry.
+Legacy Touch Count is initialized once from saved entry count as a minimum baseline. Earlier edits cannot be reconstructed. Database migrations preserve old history without inventing business dates.

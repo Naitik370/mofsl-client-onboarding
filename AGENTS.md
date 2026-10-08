@@ -10,18 +10,18 @@ Detailed decisions and requirements are maintained in:
 
 `C:\Users\Naitik\personal-vault\Projects\Client Onboarding Register`
 
-Do not move MIS calculations back into Excel or Google Sheets. The TypeScript UI collects and displays data; Python APIs persist records and calculate reports.
+Do not move MIS calculations back into Excel or Google Sheets. React collects and displays data; the ASP.NET Core REST API persists records and calculates reports.
 
 ## Run And Verify
 
 ```powershell
 npm install
-python -m pip install -r requirements.txt
 npm run build
 npm start
 ```
 
 Open `http://127.0.0.1:4173/`.
+Use Node.js 22.12+ and the .NET 10 SDK. `scripts/dotnet.mjs` also detects the local Windows SDK in `%LOCALAPPDATA%/mofsl-dotnet`; `MOFSL_DOTNET` can specify another executable. For React hot reload, run `npm run dev` alongside the API and open `http://127.0.0.1:5173/`.
 
 Before completing changes, run:
 
@@ -33,15 +33,24 @@ npm test
 
 ## Architecture
 
-- `frontend/index.html`: application shell, login, data entry, MIS, audit, and user administration.
-- `frontend/app.ts`: TypeScript UI, frontend validation, API calls, and role-aware controls.
-- `frontend/dist/app.js`: generated browser bundle. Do not edit it manually.
-- `backend/server.py`: Uvicorn server startup.
-- `backend/router.py`: FastAPI routes, cookies, authentication dependencies, and static frontend serving.
-- `backend/services.py`: authentication, authorization, persistence, validation, and MIS calculations.
+- `frontend/index.html`: React root and Vite entry point.
+- `frontend/app.tsx`: navigation and screen orchestration.
+- `frontend/useWorkspace.ts`: authenticated session and API snapshot loading.
+- `frontend/components/`: focused screens with local form state and shared display components.
+- `frontend/lib.ts`: typed API calls, form validation, and CSV parsing.
+- `frontend/dist/`: generated Vite assets. Do not edit manually.
+- `backend/dotnet/Program.cs`: dependency registration, initialization, and static frontend serving.
+- `backend/dotnet/ApiEndpoints.cs` and `ApiSessionMiddleware.cs`: HTTP contracts, cookies, session checks, and error responses.
+- `backend/dotnet/AuthenticationService.cs`, `UserService.cs`, `CaseService.cs`, and `ReportService.cs`: focused application services.
+- `backend/dotnet/CaseAccessPolicy.cs`, `CaseValidator.cs`, and `CaseQueries.cs`: permissions, validation, and shared read queries.
+- `backend/dotnet/Domain.cs`: master seeds and pure business rules.
+- `backend/dotnet/Database.cs`: parameterized SQLite access.
+- `backend/dotnet/DatabaseInitializer.cs`: idempotent schema initialization and migrations.
 - `sql/schema.sql`: normalized SQLite schema with primary and foreign keys.
 - `sql/onboarding.db`: local application database.
-- `backend/test_server.py`: backend business-rule and role-permission tests.
+- `backend/tests/ApiTests.cs`: backend business-rule, HTTP integration, and role-permission tests using isolated temporary databases.
+
+Read `documents/07-dotnet-react-migration.md` for compatibility and deployment details. The repository contains only the ASP.NET Core backend and React frontend.
 
 The normalized tables are `role_master`, `users`, `sessions`, `cases`, `case_entries`, `status_history`, `status_master`, `location_master`, `segment_master`, `holiday_master`, and `settings`. API report responses are intentionally denormalized for the UI.
 
@@ -55,6 +64,10 @@ The normalized tables are `role_master`, `users`, `sessions`, `cases`, `case_ent
 - Query Count is derived from qualifying status events.
 - RFT becomes NRFT when a Stage 1 query, Stage 3 discrepancy/return, or Stage 5 MOFSL query occurs.
 - Query Hold Days are derived from query-start and resolution events.
+- Touch Count increments once per successful entry creation or edit, including same-status saves. Reads and rejected saves do not increment it. Existing cases use saved entry counts as a minimum historical baseline.
+- Status history keeps the business event date separate from the audit recording timestamp. Undated historical events fall back to the audit date and are marked in reporting.
+- Dedicated process dates, discrepancy type, Stage 4 review outcome, and stage-specific query details are persisted and validated by the API.
+- Stage TAT accumulates gross working-day intervals across repeat visits. Skipped stages remain unknown. Stage SLA uses gross TAT and defaults to 7 working days; Admin can configure limits in SLA Settings.
 - TAT uses Monday-Friday working days excluding Holiday Master dates.
 - The default SLA is 7 working days.
 - Rejected and cancelled cases are excluded from final RFT percentage and average TAT, but remain exception counts.
@@ -80,8 +93,11 @@ RM is case metadata, not an application role. API authorization is authoritative
 
 ## Change Discipline
 
-- Keep backend dependencies minimal; FastAPI and Uvicorn provide the HTTP layer.
+- Keep backend dependencies minimal; ASP.NET Core provides HTTP and Microsoft.Data.Sqlite provides persistence.
 - Preserve the source-document fields and six-stage workflow.
-- Update `sql/schema.sql`, migrations in `init_db()`, tests, and this file together when the data model changes.
+- Update `sql/schema.sql`, migrations in `DatabaseInitializer.Initialize()`, tests, and this file together when the data model changes.
+- Keep HTTP handlers thin, business rules in focused services, and form state inside its screen. Inject `TimeProvider` for server dates and session expiry.
+- Run `npm run format` for consistent source formatting.
+- Regenerate `documents/client-onboarding-flow.html` with `npm run guide` after source edits; run `npm run guide:check` to verify its embedded excerpts match the source. Author content in `scripts/flow-guide-content.mjs` and layout in `documents/flow-guide-template.html`.
 - Add backend checks for every permission or calculation change; frontend checks alone are insufficient.
 - Do not commit generated caches, temporary recordings, or local server logs.

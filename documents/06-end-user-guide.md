@@ -11,7 +11,7 @@ Use this application to record each onboarding request once, add later activity 
 
 ## Before you begin
 
-Open `http://127.0.0.1:4173/` and sign in with your assigned account. Never share credentials or use the seeded demo passwords in a shared deployment.
+Open `http://127.0.0.1:4173/` and sign in with your assigned account. Keep your sign-in details private.
 
 ## What each role can do
 
@@ -34,7 +34,7 @@ Open `http://127.0.0.1:4173/` and sign in with your assigned account. Never shar
 7. Add query details whenever the selected status represents a query, discrepancy, or returned form.
 8. Select **Save entry**.
 
-The backend validates the request, generates a Reference ID in the format `MOFSL-YYYYMMDD-XXXXXXXX`, creates the case and its first entry, and adds the initial status-history event.
+The application validates the request, generates a Reference ID in the format `MOFSL-YYYYMMDD-XXXXXXXX`, creates the case and its first entry, and adds the initial status-history event.
 
 ## Add activity to an existing case
 
@@ -43,7 +43,7 @@ The Reference ID must remain unchanged throughout the journey.
 - Admin or Operations can select **Edit** to change the existing operational entry, or create a new related entry using `Resubmission`, `Discrepancy Resolution`, or `Modification`.
 - CSE and MOFSL select **Add update**. The form copies the current case data but saves a new related entry rather than overwriting the old one.
 - A non-`New` entry is rejected when its Reference ID does not already exist.
-- Users cannot supply the Reference ID for a `New` entry; the API always generates it.
+- Users cannot supply the Reference ID for a `New` entry; the application generates it when you save.
 
 ## Handle the normal case journey
 
@@ -108,6 +108,7 @@ Dates are manual by default. Admin may select **Auto-capture related date** for 
 5. Import valid rows.
 
 Valid rows are submitted individually. Earlier rows remain saved if a later row fails.
+CSV date columns accept `DD-MM-YYYY` or `YYYY-MM-DD`.
 
 ## Use the reports
 
@@ -131,3 +132,11 @@ PAN is masked in reports. Management Viewer also receives masked PAN in the regi
 | Physical/Digital submission mismatch | Match the selected status to the case channel |
 | CSE users can only update their own cases | Confirm the case's CSE Name matches your display name |
 | MOFSL users can only update Stage 5 cases | Operations must first move the case to Stage 5 |
+
+## Business dates, case details, and SLA
+
+Open Stage dates while entering a case to record dedicated process dates. Status business date records when the selected status happened, independently of the audit recording time. Discrepancy type and Stage 4 review outcome have controlled dropdown values.
+
+Touch Count is automatic: each successful new entry or edit counts once, including unchanged-status edits. Viewing and rejected saves do not count. Old records show a minimum baseline from saved entries.
+
+Choose Details in Case Register for dates, touches, original inward, resubmissions, overall and stage timing, SLA, and query attribution. Skipped stages show Not observed. Admin can configure SLA Settings; all thresholds use gross working days and default to seven.

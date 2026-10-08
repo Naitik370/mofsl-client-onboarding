@@ -1,40 +1,15 @@
----
-title: MOFSL Client Onboarding Code Guide
-tags:
-  - client-onboarding
-  - documentation
-  - code-guide
----
+# Client onboarding guides
 
-# MOFSL Client Onboarding Code Guide
+The application is an ASP.NET Core REST API with a React frontend.
 
-This directory explains the application as it is currently implemented. The guides use the project source code as the authority for runtime behavior and the Obsidian notes under `Projects/Client Onboarding Register` as business context.
+1. [Interactive flow and exact source blocks](client-onboarding-flow.html)
+2. [Document alignment and final sanity check](08-specification-audit.md)
+3. [Architecture and request flow](01-architecture-and-request-flow.md)
+4. [Backend walkthrough](02-backend-code-walkthrough.md)
+5. [React walkthrough](03-frontend-code-walkthrough.md)
+6. [Status reference](04-status-handling-reference.md)
+7. [Database and calculations](05-database-and-calculations.md)
+8. [End-user guide](06-end-user-guide.md)
+9. [API, migration, and deployment](07-dotnet-react-migration.md)
 
-## Reading order
-
-1. [Architecture and request flow](01-architecture-and-request-flow.md)
-2. [Backend code walkthrough](02-backend-code-walkthrough.md)
-3. [Frontend code walkthrough](03-frontend-code-walkthrough.md)
-4. [Status handling reference](04-status-handling-reference.md)
-5. [Database and calculations](05-database-and-calculations.md)
-6. [End-user guide](06-end-user-guide.md)
-7. [Stage flow and edge-case guide — standalone HTML](user-stories-and-case-handling.html)
-
-> [!important]
-> “Intended workflow” and “enforced behavior” are different. The application maps every status to a stage, but it does not currently enforce a transition graph such as Stage 1 → Stage 2 → Stage 3.
-
-## Source map
-
-| Area | Source |
-| --- | --- |
-| Browser shell | `frontend/index.html` |
-| Browser styling | `frontend/styles.css` |
-| Browser behavior | `frontend/app.ts` |
-| Generated browser bundle | `frontend/dist/app.js` — do not edit directly |
-| HTTP API | `backend/router.py` |
-| Application/persistence service | `backend/services.py` |
-| Pure business rules | `backend/domain.py` |
-| Role policies | `backend/policies.py` |
-| Server startup | `backend/server.py` |
-| Database definition | `sql/schema.sql` |
-| Tests | `backend/test_server.py` |
+The user-story and role HTML guides explain the operational workflow. The interactive flow guide includes the active source excerpts and current calculation rules.
