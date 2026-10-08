@@ -261,9 +261,6 @@ export function CaseEntry({
             {messages.join(' ')}
           </span>
         )}
-        {name === 'referenceId' && (
-          <small>Generated for New entries. Use an existing ID for related entries.</small>
-        )}
       </label>
     );
   }
