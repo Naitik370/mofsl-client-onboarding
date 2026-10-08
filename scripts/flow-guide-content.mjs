@@ -312,9 +312,9 @@ export const topics = [
     roles: ['admin', 'operations', 'cse'],
     summary: 'CSE sends the request; Operations checks whether information is complete.',
     user: [
-      'CSE saves a New entry and the status automatically becomes Under Review by Operations.',
+      'A New CSE form shows Request Received from CSE. Saving automatically changes it to Under Review by Operations.',
       'New process dates select completed-action statuses automatically on save. Choosing Latest status manually disables this option. Operations selects queries, review initiation, and exceptions deliberately.',
-      'If Operations selects Query Raised to CSE - Missing Information, the CSE update automatically selects Resubmission and Resubmitted by CSE.',
+      'A CSE update shows the current query status and selects the Resubmission entry type. Saving applies Resubmitted by CSE.',
     ],
     system: [
       'New saves generate a Reference ID. A query-start event increments query count and makes the case NRFT.',

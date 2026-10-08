@@ -244,12 +244,7 @@ export function defaults(user: User, meta: Meta): Record<string, string> {
     submittedDate: '',
     accountOpeningDate: '',
     accountNumber: '',
-    status:
-      user.role === 'mofsl'
-        ? mofslStatuses[0]
-        : user.role === 'cse'
-          ? 'Under Review by Operations'
-          : 'Request Received from CSE',
+    status: user.role === 'mofsl' ? mofslStatuses[0] : 'Request Received from CSE',
     queryDetails: '',
     remarks: '',
     stage1QueryDetails: '',
@@ -260,6 +255,22 @@ export function defaults(user: User, meta: Meta): Record<string, string> {
     autoStatus: 'true',
     stageOverride: '',
   };
+}
+export function submissionPayload(form: Record<string, string>, user: User, current: Row | null) {
+  const payload = { ...form };
+  // Display the saved state; CSE response statuses take effect only when saving.
+  if (user.role === 'cse' && current && form.status === current.status) {
+    if (current.status === 'Query Raised to CSE - Missing Information') {
+      payload.entryType = 'Resubmission';
+      payload.status = 'Resubmitted by CSE';
+    } else if (
+      ['Discrepancy Raised to CSE', 'Form Returned to CSE'].includes(String(current.status))
+    ) {
+      payload.entryType = 'Discrepancy Resolution';
+      payload.status = 'Discrepancy Resolution Received';
+    }
+  }
+  return payload;
 }
 export function validate(
   payload: Record<string, string>,

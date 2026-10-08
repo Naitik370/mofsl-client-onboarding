@@ -55,6 +55,7 @@ const {
   parseCsv,
   csvRecords,
   defaults,
+  submissionPayload,
   validate,
   api,
   ApiError,
@@ -126,16 +127,33 @@ test('New entries default inward to the server date while edits preserve supplie
   assert.match(html, /name="inwardDate"[^>]*value="2026-07-01"/);
 });
 
-test('CSE new submissions use Operations review and queried updates select resubmission', () => {
+test('CSE forms display the current status and apply query responses only on submission', () => {
   const cse = { ...user, role: 'cse', displayName: 'CSE Demo' };
   const workflowMeta = {
     ...meta,
-    statuses: ['Under Review by Operations', 'Resubmitted by CSE'].map((status) => ({
+    statuses: [
+      'Request Received from CSE',
+      'Under Review by Operations',
+      'Query Raised to CSE - Missing Information',
+      'Resubmitted by CSE',
+    ].map((status) => ({
       status,
       stage: 'Stage 1',
     })),
   };
-  assert.equal(defaults(cse, workflowMeta).status, 'Under Review by Operations');
+  const newForm = defaults(cse, workflowMeta);
+  assert.equal(newForm.status, 'Request Received from CSE');
+  const props = {
+    user: cse,
+    meta: workflowMeta,
+    onSaved: async () => {},
+    onClear: () => {},
+    onError: String,
+  };
+  const newHtml = renderToStaticMarkup(
+    createElement(CaseEntry, { ...props, cases: [], selected: null }),
+  );
+  assert.match(newHtml, /<option selected="">Request Received from CSE<\/option>/);
   const queried = {
     ...valid,
     id: 1,
@@ -144,20 +162,54 @@ test('CSE new submissions use Operations review and queried updates select resub
   };
   const html = renderToStaticMarkup(
     createElement(CaseEntry, {
-      user: cse,
-      meta: workflowMeta,
+      ...props,
       cases: [queried],
       selected: queried,
+    }),
+  );
+  assert.match(html, /name="entryType"[^>]*><option selected="">Resubmission<\/option><\/select>/);
+  assert.match(html, /<option selected="">Query Raised to CSE - Missing Information<\/option>/);
+  const response = {
+    ...newForm,
+    referenceId: 'REF-1',
+    entryType: 'Resubmission',
+    status: queried.status,
+  };
+  const payload = submissionPayload(response, cse, queried);
+  assert.equal(payload.status, 'Resubmitted by CSE');
+  assert.equal(payload.entryType, 'Resubmission');
+  assert.equal(response.status, queried.status);
+  for (const status of ['Discrepancy Raised to CSE', 'Form Returned to CSE']) {
+    const current = { ...queried, status };
+    const resolution = submissionPayload({ ...response, status }, cse, current);
+    assert.equal(resolution.status, 'Discrepancy Resolution Received');
+    assert.equal(resolution.entryType, 'Discrepancy Resolution');
+  }
+  const manual = { ...response, status: 'Resubmitted Form Received - Under Review' };
+  assert.deepEqual(submissionPayload(manual, cse, queried), manual);
+  assert.deepEqual(submissionPayload(response, user, queried), response);
+});
+
+test('MOFSL updates display the saved status before a new action is selected', () => {
+  const current = { ...valid, id: 1, status: 'Submitted to MOFSL' };
+  const html = renderToStaticMarkup(
+    createElement(CaseEntry, {
+      user: { ...user, role: 'mofsl' },
+      meta: {
+        ...meta,
+        statuses: ['Submitted to MOFSL', 'Query Raised by MOFSL'].map((status) => ({
+          status,
+          stage: 'Stage 5',
+        })),
+      },
+      cases: [current],
+      selected: current,
       onSaved: async () => {},
       onClear: () => {},
       onError: String,
     }),
   );
-  assert.match(html, /name="entryType"[^>]*><option selected="">Resubmission<\/option><\/select>/);
-  assert.match(
-    html,
-    /name="status"[^>]*><optgroup label="Stage 1"><option selected="">Resubmitted by CSE<\/option><\/optgroup><\/select>/,
-  );
+  assert.match(html, /<option selected="">Submitted to MOFSL<\/option>/);
 });
 
 test('automatic status and stage override controls respect the user role', () => {

@@ -36,7 +36,7 @@ Open `http://127.0.0.1:4173/` and sign in with your assigned account. Keep your 
 
 The application validates the request, generates a Reference ID in the format `MOFSL-YYYYMMDD-XXXXXXXX`, creates the case and its first entry, and adds the initial status-history event.
 
-For CSE users, saving a New entry automatically sets the status to `Under Review by Operations` and assigns it to Operations.
+For CSE users, a New form displays `Request Received from CSE`. Saving the entry automatically sets the status to `Under Review by Operations` and assigns it to Operations.
 
 ## Add activity to an existing case
 
@@ -50,7 +50,7 @@ Navigation uses URLs such as `#/cases` and `#/cases/MOFSL-20260808-06B20049`. Co
 
 - Admin or Operations can select **Edit** to change the existing operational entry, or create a new related entry using `Resubmission`, `Discrepancy Resolution`, or `Modification`.
 - CSE and MOFSL select **Add update**. The form copies the current case data but saves a new related entry rather than overwriting the old one.
-- When Operations has selected `Query Raised to CSE - Missing Information`, the CSE update automatically selects `Resubmission` and `Resubmitted by CSE`. Saving keeps the existing Reference ID and closes the query hold interval.
+- When Operations has selected `Query Raised to CSE - Missing Information`, the CSE update displays that current status and selects the `Resubmission` entry type. Saving applies `Resubmitted by CSE`, keeps the existing Reference ID and closes the query hold interval.
 - A non-`New` entry is rejected when its Reference ID does not already exist.
 - Users cannot supply the Reference ID for a `New` entry; the application generates it when you save.
 

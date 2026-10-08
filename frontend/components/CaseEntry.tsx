@@ -11,6 +11,7 @@ import {
   discrepancyTypes,
   reviewOutcomes,
   defaults,
+  submissionPayload,
   entryTypes,
   mofslStatuses,
   owners,
@@ -43,14 +44,12 @@ function initialEntry(user: User, meta: Meta, selected: Row | null) {
   if (selected && ['cse', 'mofsl'].includes(user.role)) {
     payload.statusDate = '';
     payload.entryType = user.role === 'cse' ? 'Resubmission' : 'Modification';
-    payload.status = user.role === 'cse' ? 'Resubmitted by CSE' : mofslStatuses[0];
     payload.owner = user.role === 'cse' ? 'Operations' : 'MOFSL';
     if (
       user.role === 'cse' &&
       ['Discrepancy Raised to CSE', 'Form Returned to CSE'].includes(text(selected.status))
     ) {
       payload.entryType = 'Discrepancy Resolution';
-      payload.status = 'Discrepancy Resolution Received';
     }
   }
   return payload;
@@ -94,22 +93,21 @@ export function CaseEntry({
     selected && ['admin', 'operations'].includes(user.role) ? Number(selected.id) : null,
   );
   const referenceLocked = selected !== null;
+  const currentCase =
+    cases.find((row) => text(row.referenceId).toLowerCase() === form.referenceId.toLowerCase()) ||
+    selected;
   const cseQueryResponse =
-    user.role === 'cse' &&
-    (
-      cases.find((row) => text(row.referenceId).toLowerCase() === form.referenceId.toLowerCase()) ||
-      selected
-    )?.status === 'Query Raised to CSE - Missing Information';
+    user.role === 'cse' && currentCase?.status === 'Query Raised to CSE - Missing Information';
   const allowedStatuses = meta.statuses
     .filter((item) =>
       user.role === 'cse'
         ? cseQueryResponse
-          ? item.status === 'Resubmitted by CSE'
+          ? item.status === currentCase?.status || item.status === 'Resubmitted by CSE'
           : form.entryType === 'New'
-            ? item.status === 'Under Review by Operations'
-            : cseStatuses.includes(item.status)
+            ? item.status === 'Request Received from CSE'
+            : item.status === currentCase?.status || cseStatuses.includes(item.status)
         : user.role === 'mofsl'
-          ? mofslStatuses.includes(item.status)
+          ? item.status === currentCase?.status || mofslStatuses.includes(item.status)
           : true,
     )
     .map((item) => item.status);
@@ -127,10 +125,14 @@ export function CaseEntry({
       ...(name === 'status' ? { statusDate: '', autoStatus: 'false' } : {}),
       ...(name === 'entryType' && value === 'New' && !referenceLocked ? { referenceId: '' } : {}),
       ...(user.role === 'cse' && name === 'entryType' && value === 'New'
-        ? { status: 'Under Review by Operations', statusDate: '' }
+        ? { status: 'Request Received from CSE', statusDate: '' }
         : {}),
       ...(queryResponse
-        ? { entryType: 'Resubmission', status: 'Resubmitted by CSE', statusDate: '' }
+        ? {
+            entryType: 'Resubmission',
+            status: 'Query Raised to CSE - Missing Information',
+            statusDate: '',
+          }
         : {}),
     }));
   }
@@ -160,7 +162,13 @@ export function CaseEntry({
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const references = new Set(cases.map((row) => text(row.referenceId).toLowerCase()));
-    const errors = validate(form, meta, references);
+    const payload = submissionPayload(form, user, currentCase);
+    const errors = validate(payload, meta, references);
+    if (
+      (user.role === 'cse' && !cseStatuses.includes(payload.status)) ||
+      (user.role === 'mofsl' && !mofslStatuses.includes(payload.status))
+    )
+      errors.push('Latest status: choose an allowed status for this update before saving');
     showErrors(errors);
     if (errors.length) return;
 
@@ -168,7 +176,7 @@ export function CaseEntry({
     try {
       const saved = await api<Row>(editingId === null ? '/api/cases' : `/api/cases/${editingId}`, {
         method: editingId === null ? 'POST' : 'PUT',
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       onDirtyChange?.(false);
       await onSaved(saved);
