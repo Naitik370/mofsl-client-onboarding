@@ -83,6 +83,34 @@ export const dateLabels: Record<string, string> = {
   communicationSentDate: 'Communication sent date',
 };
 export const dateFields = Object.keys(dateLabels);
+const stageDateFields: Record<string, string[]> = {
+  'Stage 1': ['resubmissionDate', 'stage1QueryRaisedDate', 'stage1ResubmissionDate'],
+  'Stage 2': [
+    'outwardDate',
+    'formPreparedDate',
+    'physicalFormSubmittedDate',
+    'digitalFormSentDate',
+  ],
+  'Stage 3': ['signedFormDate', 'discrepancyRaisedDate', 'formReturnedToCseDate'],
+  'Stage 4': [
+    'resubmissionDate',
+    'discrepancyResolutionReceivedDate',
+    'resubmittedFormReceivedDate',
+  ],
+  'Stage 5': ['submittedDate', 'mofslQueryRaisedDate', 'mofslQueryResolvedDate'],
+  'Stage 6': ['accountOpeningDate', 'communicationSentDate'],
+};
+
+export function visibleDateFields(stage: string, channel: string, showAll = false) {
+  if (showAll) return dateFields;
+  return ['inwardDate', 'statusDate', ...(stageDateFields[stage] || [])].filter(
+    (name) =>
+      (name !== 'physicalFormSubmittedDate' || channel === 'Physical') &&
+      (name !== 'digitalFormSentDate' || channel === 'Digital') &&
+      (name !== 'formReturnedToCseDate' || channel === 'Physical'),
+  );
+}
+
 const automaticDateFields: Record<string, string> = {
   'Request Received from CSE': 'inwardDate',
   'Physical Form Submitted to CSE': 'outwardDate',

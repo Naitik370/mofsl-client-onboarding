@@ -2,11 +2,37 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import ts from 'typescript';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+function componentModule(path, dependencies = {}) {
+  let code = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ES2022,
+      jsx: ts.JsxEmit.ReactJSX,
+    },
+  }).outputText;
+  code = code.replace(
+    /from ['"]([^'"]+)['"]/g,
+    (_match, name) => `from ${JSON.stringify(dependencies[name] || import.meta.resolve(name))}`,
+  );
+  return `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+}
+
 const source = readFileSync(new URL('../frontend/lib.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
 }).outputText;
-const { parseCsv, csvRecords, defaults, validate, api, ApiError } =
+const libModule = `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`;
+const sharedModule = componentModule('../frontend/components/shared.tsx', { '../lib': libModule });
+const { CaseEntry } = await import(
+  componentModule('../frontend/components/CaseEntry.tsx', {
+    '../lib': libModule,
+    './shared': sharedModule,
+  })
+);
+const { parseCsv, csvRecords, defaults, validate, api, ApiError, visibleDateFields, dateFields } =
   await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const user = { id: 1, username: 'operations', displayName: 'Operations Demo', role: 'operations' };
 const meta = {
@@ -24,6 +50,71 @@ const valid = {
   pan: 'ABCDE1234F',
   inwardDate: '2026-07-01',
 };
+
+test('new Stage 1 form does not display later-stage dates', () => {
+  const html = renderToStaticMarkup(
+    createElement(CaseEntry, {
+      user,
+      meta,
+      cases: [],
+      selected: null,
+      onSaved: async () => {},
+      onClear: () => {},
+      onError: String,
+    }),
+  );
+  assert(html.includes('name="inwardDate"'));
+  assert(html.includes('name="stage1QueryRaisedDate"'));
+  assert(!html.includes('name="formPreparedDate"'));
+  assert(!html.includes('name="accountOpeningDate"'));
+});
+
+test('entry form shows dates for each master stage and the selected channel', () => {
+  const stages = [
+    ['Stage 1', 'stage1ResubmissionDate'],
+    ['Stage 2', 'formPreparedDate'],
+    ['Stage 3', 'discrepancyRaisedDate'],
+    ['Stage 4', 'discrepancyResolutionReceivedDate'],
+    ['Stage 5', 'mofslQueryRaisedDate'],
+    ['Stage 6', 'communicationSentDate'],
+  ];
+  for (const [stage, expected] of stages) {
+    for (const channel of ['Physical', 'Digital']) {
+      const html = renderToStaticMarkup(
+        createElement(CaseEntry, {
+          user,
+          meta: { ...meta, statuses: [{ status: 'Selected status', stage }] },
+          cases: [],
+          selected: {
+            ...valid,
+            id: 1,
+            status: 'Selected status',
+            channel,
+            formPreparedDate: '2026-07-02',
+          },
+          onSaved: async () => {},
+          onClear: () => {},
+          onError: String,
+        }),
+      );
+      assert(html.includes(`name="${expected}"`), `${stage} ${channel}: missing ${expected}`);
+      for (const [otherStage, otherField] of stages) {
+        if (otherStage !== stage) assert(!html.includes(`name="${otherField}"`));
+      }
+      assert(html.includes('Show all process dates'));
+      if (stage === 'Stage 2') {
+        assert.equal(html.includes('name="physicalFormSubmittedDate"'), channel === 'Physical');
+        assert.equal(html.includes('name="digitalFormSentDate"'), channel === 'Digital');
+      }
+      if (stage === 'Stage 3') {
+        assert.equal(html.includes('name="formReturnedToCseDate"'), channel === 'Physical');
+      }
+    }
+  }
+  assert.deepEqual(visibleDateFields('Exception', 'Physical'), ['inwardDate', 'statusDate']);
+  assert.deepEqual(visibleDateFields('', 'Physical'), ['inwardDate', 'statusDate']);
+  assert.deepEqual(visibleDateFields('Stage 1', 'Digital', true), dateFields);
+});
 
 test('CSV preserves quoted names, notes, escaped quotes, BOM and multiline records', () => {
   const rows = parseCsv(

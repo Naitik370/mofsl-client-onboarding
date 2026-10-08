@@ -13,6 +13,7 @@ import {
   mofslStatuses,
   owners,
   validate,
+  visibleDateFields,
   type Meta,
   type Row,
   type User,
@@ -48,6 +49,10 @@ export function CaseEntry({ user, meta, cases, selected, onSaved, onClear, onErr
   const [form, setForm] = useState(() => initialEntry(user, meta, selected));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showAllDates, setShowAllDates] = useState(false);
+  const stage = meta.statuses.find((item) => item.status === form.status)?.stage || '';
+  const visibleDates = visibleDateFields(stage, form.channel, showAllDates);
+  const additionalDates = dateFields.slice(7).filter((name) => visibleDates.includes(name));
   const editingId =
     selected && ['admin', 'operations'].includes(user.role) ? Number(selected.id) : null;
   const referenceLocked = selected !== null;
@@ -189,6 +194,7 @@ export function CaseEntry({ user, meta, cases, selected, onSaved, onClear, onErr
             )}
             {dateFields
               .slice(0, 6)
+              .filter((name) => visibleDates.includes(name))
               .map((name) =>
                 field(
                   name,
@@ -210,14 +216,25 @@ export function CaseEntry({ user, meta, cases, selected, onSaved, onClear, onErr
             {field('stage4ReviewOutcome', 'Stage 4 review outcome', ['', ...reviewOutcomes])}
             {field('stage1QueryDetails', 'Stage 1 query details')}
             {field('mofslQueryType', 'MOFSL query type')}
-            <details className="wide process-fields">
-              <summary>Stage dates</summary>
-              <div className="form-grid">
-                {dateFields
-                  .slice(7)
-                  .map((name) => field(name, dateLabels[name], undefined, 'date'))}
-              </div>
-            </details>
+            <label className="wide auto-date-control">
+              <span>
+                <input
+                  type="checkbox"
+                  checked={showAllDates}
+                  onChange={(event) => setShowAllDates(event.target.checked)}
+                />{' '}
+                Show all process dates
+              </span>
+              <small>Dates follow Latest status. Previously entered dates remain saved.</small>
+            </label>
+            {additionalDates.length > 0 && (
+              <details className="wide process-fields" open>
+                <summary>{showAllDates ? 'All stage dates' : `${stage} dates`}</summary>
+                <div className="form-grid">
+                  {additionalDates.map((name) => field(name, dateLabels[name], undefined, 'date'))}
+                </div>
+              </details>
+            )}
             {user.role === 'admin' && (
               <label className="wide auto-date-control">
                 <span>

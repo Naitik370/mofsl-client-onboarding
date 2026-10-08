@@ -554,6 +554,7 @@ export const topics = [
     ],
     system: [
       'CaseEntry starts with defaults or a selected row. CSE/MOFSL prepares a related update; Admin/Operations edits the selected entry.',
+      'Date fields follow the selected master stage and channel. Show all process dates reveals other dates without clearing saved values.',
       'Frontend validation checks required fields, PAN, masters, dates, channel consistency, query details, and known related references.',
       'POST /api/cases creates an entry. PUT /api/cases/{id} updates an entry.',
     ],

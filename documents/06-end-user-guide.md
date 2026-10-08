@@ -135,7 +135,9 @@ PAN is masked in reports. Management Viewer also receives masked PAN in the regi
 
 ## Business dates, case details, and SLA
 
-Open Stage dates while entering a case to record dedicated process dates. Status business date records when the selected status happened, independently of the audit recording time. Discrepancy type and Stage 4 review outcome have controlled dropdown values.
+Date fields follow the stage derived from Latest status. Stage 2 dispatch dates also follow the Physical/Digital channel; the form-return date appears for Physical cases. Inward date and Status business date remain available in every stage. Select Show all process dates to inspect or correct dates from other stages. Switching stage or hiding a date does not clear its value. Exception statuses show the common dates unless Show all process dates is selected. Dates are optional unless required by the selected status; they are not automatically filled by switching stages.
+
+Status business date records when the selected status happened, independently of the audit recording time. Discrepancy type and Stage 4 review outcome have controlled dropdown values.
 
 Touch Count is automatic: each successful new entry or edit counts once, including unchanged-status edits. Viewing and rejected saves do not count. Old records show a minimum baseline from saved entries.
 
