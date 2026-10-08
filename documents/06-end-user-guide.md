@@ -29,7 +29,7 @@ Open `http://127.0.0.1:4173/` and sign in with your assigned account. Keep your 
 2. Enter a **Request ID**. The application generates the stable **Reference ID** when the case is saved.
 3. Keep **Entry Type** as `New`.
 4. Enter client, PAN, account type, channel, location, segment, RM, CSE, processor, and owner details.
-5. Enter the required inward date.
+5. Review Inward date, which defaults to today. Correct it if Operations received the request earlier.
 6. Select the current status from the controlled list.
 7. Add query details whenever the selected status represents a query, discrepancy, or returned form.
 8. Select **Save entry**.
@@ -97,7 +97,9 @@ Add a clear remark because rejection and cancellation reasons are not currently 
 
 ## Automatic dates
 
-Dates are manual by default. Admin may select **Auto-capture related date** for one save. The server fills the relevant blank date with today and never overwrites a supplied date. Operations, CSE, and MOFSL cannot enable this option.
+Inward date defaults to the server's current local date for New cases. It remains editable for earlier receipts. The API also fills a missing inward date when creating a New case. Supplied dates are preserved, and edits or related updates do not automatically receive a new inward date. Case-level TAT continues to use the earliest inward date under the Reference ID.
+
+Other process dates are manual by default. Admin may select **Auto-capture related date** for one save. The server fills the relevant blank date with today and never overwrites a supplied date. Operations, CSE, and MOFSL cannot enable this option.
 
 ## Bulk upload
 

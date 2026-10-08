@@ -22,7 +22,7 @@ tags: [client-onboarding, workflow, status-master]
 
 | Status | Intended meaning | Special handling |
 | --- | --- | --- |
-| Request Received from CSE | Operations receives the request | CSE may record it. Admin auto-date can fill `inwardDate`, although inward date is already required. |
+| Request Received from CSE | Operations receives the request | CSE may record it. New cases default `inwardDate` to the server's current local date, with supplied dates preserved. Users can correct it for an earlier receipt. |
 | Under Review by Operations | Operations checks completeness | No special validation or date field. |
 | Query Raised to CSE - Missing Information | Information is missing | `queryDetails` required. Starts the `stage1` query clock, adds one Query Count, and makes the case NRFT. |
 | Resubmitted by CSE | CSE supplies missing information | CSE may record it. Ends the oldest open `stage1` query clock. Admin auto-date can fill `resubmissionDate`. |
@@ -86,7 +86,7 @@ Exception statuses map to `Exception`, outside Stages 1–6. Rejected and cancel
 | Role | Status authority |
 | --- | --- |
 | Admin | Any status; may enable per-entry automatic date capture |
-| Operations | Any status; dates remain manual |
+| Operations | Any status; New-case inward date defaults to today, other dates remain manual |
 | CSE | Request Received, Resubmitted by CSE, Discrepancy Resolution Received, Resubmitted Form Received; own cases only |
 | MOFSL | Query Raised by MOFSL, Query Resolved, Account Opened, Communication Sent; existing case must currently be Stage 5 or 6 |
 | Viewer | No writes |
@@ -103,4 +103,3 @@ Query Resolved               -> close oldest stage5 hold
 ```
 
 An unresolved query continues accumulating working-day hold time through today.
-

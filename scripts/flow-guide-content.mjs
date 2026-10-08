@@ -712,15 +712,17 @@ export const topics = [
   {
     id: 'dates',
     chapter: 'save',
-    title: 'Manual dates and admin-only automatic capture',
+    title: 'Automatic inward date and optional process-date capture',
     roles: ['admin', 'operations', 'cse', 'mofsl'],
-    summary: 'Operational dates are supplied by people unless an admin opts in.',
+    summary:
+      'New cases default Inward date to today; other process dates stay manual unless an admin opts in.',
     user: [
-      'Enter the generic dates and the dedicated dates under Stage dates.',
+      'Review the automatic New-case Inward date and correct it for an earlier receipt. Enter other dates when their activities happen.',
       'For a backdated status change, set Status business date. Admin can fill blank status-related dates automatically.',
     ],
     system: [
       'EntryFields defines the persisted stage date columns. CaseValidator validates them.',
+      'Metadata supplies the server local date for New forms. SaveCase fills a missing New-case Inward date; supplied dates and normal edits/related entries are preserved.',
       'The API captures a business date for each status event separately from its audit recording timestamp.',
       'Admin automatic capture fills blank generic and dedicated status dates without replacing supplied dates.',
     ],

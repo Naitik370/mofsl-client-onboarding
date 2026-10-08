@@ -9,6 +9,7 @@ export type Row = Record<
   string | number | boolean | null | Record<string, string | number | boolean | null>
 >;
 export type Meta = {
+  today?: string;
   statuses: { status: string; stage: string }[];
   locations: string[];
   segments: string[];
@@ -161,6 +162,10 @@ export function formatDate(value: unknown): string {
     : '-';
 }
 export function defaults(user: User, meta: Meta): Record<string, string> {
+  const now = new Date();
+  const today =
+    meta.today ??
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   return {
     ...Object.fromEntries(dateFields.map((field) => [field, ''])),
     referenceId: '',
@@ -176,7 +181,7 @@ export function defaults(user: User, meta: Meta): Record<string, string> {
     rmName: '',
     processorName: '',
     owner: user.role === 'mofsl' ? 'MOFSL' : 'Operations',
-    inwardDate: '',
+    inwardDate: user.role === 'mofsl' ? '' : today,
     outwardDate: '',
     resubmissionDate: '',
     signedFormDate: '',
@@ -317,6 +322,8 @@ export function parseCsv(
   return records.map((values) => {
     const raw = Object.fromEntries(headers.map((header, i) => [header, (values[i] || '').trim()]));
     const payload = defaults(user, meta);
+    const defaultInwardDate = payload.inwardDate;
+    payload.inwardDate = '';
     for (const field of Object.keys(payload))
       if (raw[field.toLowerCase()] !== undefined) payload[field] = raw[field.toLowerCase()];
     for (const [field, label] of Object.entries(dateLabels)) {
@@ -326,6 +333,7 @@ export function parseCsv(
     payload.pan = raw.panno || raw.pan || '';
     payload.status = raw.lateststatus || raw.status || '';
     payload.submittedDate = raw.submittedtomofsldate || raw.submitteddate || payload.submittedDate;
+    if (payload.entryType === 'New' && !payload.inwardDate) payload.inwardDate = defaultInwardDate;
     for (const field of dateFields)
       payload[field] = payload[field].replace(/^(\d{2})-(\d{2})-(\d{4})$/, '$3-$2-$1');
     payload.autoCaptureDates = 'false';

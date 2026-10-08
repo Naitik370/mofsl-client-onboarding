@@ -21,6 +21,38 @@ public sealed class ApiTests : IDisposable
     }
 
     [Fact]
+    public void NewInwardDateUsesServerClockAndPreservesExplicitAndExistingDates()
+    {
+        var service = new CaseService(database, new FixedClock(new DateTimeOffset(2026, 7, 10, 10, 0, 0, TimeSpan.Zero)));
+        Assert.Equal("2026-07-10", Json(service.GetMeta()).GetProperty("today").GetString());
+        foreach (var role in new[] { Admin, Operations, new User(3, "cse", "CSE Demo", "cse") })
+        {
+            var payload = Base();
+            payload.Remove("inwardDate");
+            var result = service.SaveCase(payload, role);
+            Assert.Equal(201, result.Status);
+            Assert.Equal("2026-07-10", Json(result.Body).GetProperty("inwardDate").GetString());
+        }
+        var blank = Base();
+        blank["inwardDate"] = "  ";
+        Assert.Equal("2026-07-10", Json(service.SaveCase(blank, Operations).Body).GetProperty("inwardDate").GetString());
+        var explicitDate = Base();
+        var saved = Json(service.SaveCase(explicitDate, Operations).Body);
+        Assert.Equal("2026-07-01", saved.GetProperty("inwardDate").GetString());
+        var later = new CaseService(database, new FixedClock(new DateTimeOffset(2026, 7, 11, 10, 0, 0, TimeSpan.Zero)));
+        var id = saved.GetProperty("id").GetInt64();
+        Assert.Equal("2026-07-01", Json(later.SaveCase(explicitDate, Operations, id).Body).GetProperty("inwardDate").GetString());
+        explicitDate["inwardDate"] = "";
+        Assert.Equal(400, later.SaveCase(explicitDate, Operations, id).Status);
+        explicitDate["entryType"] = "Resubmission";
+        explicitDate["referenceId"] = saved.GetProperty("referenceId").GetString();
+        explicitDate["status"] = "Resubmitted by CSE";
+        Assert.Equal(400, later.SaveCase(explicitDate, Operations).Status);
+        explicitDate["inwardDate"] = "2026-07-01";
+        Assert.Equal("2026-07-01", Json(later.SaveCase(explicitDate, Operations).Body).GetProperty("inwardDate").GetString());
+    }
+
+    [Fact]
     public void LegacySchemaMigrationPreservesRecordsAndInitializesTouchBaselineOnce()
     {
         var saved = Json(cases.SaveCase(Base(), Operations).Body);

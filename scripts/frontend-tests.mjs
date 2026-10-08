@@ -42,6 +42,7 @@ const meta = {
   locations: ['Mumbai'],
   segments: ['Retail'],
   slaDays: 7,
+  today: '2026-07-10',
 };
 const valid = {
   ...defaults(user, meta),
@@ -50,6 +51,25 @@ const valid = {
   pan: 'ABCDE1234F',
   inwardDate: '2026-07-01',
 };
+
+test('New entries default inward to the server date while edits preserve supplied dates', () => {
+  for (const role of ['admin', 'operations', 'cse']) {
+    assert.equal(defaults({ ...user, role }, meta).inwardDate, meta.today);
+  }
+  assert.equal(defaults({ ...user, role: 'mofsl' }, meta).inwardDate, '');
+  const html = renderToStaticMarkup(
+    createElement(CaseEntry, {
+      user,
+      meta,
+      cases: [],
+      selected: { ...valid, id: 1 },
+      onSaved: async () => {},
+      onClear: () => {},
+      onError: String,
+    }),
+  );
+  assert.match(html, /name="inwardDate"[^>]*value="2026-07-01"/);
+});
 
 test('new Stage 1 form does not display later-stage dates', () => {
   const html = renderToStaticMarkup(
@@ -139,6 +159,23 @@ test('CSV reports invalid calendar dates and unknown related references', () => 
   );
   assert(rows[0].errors.some((x) => x.includes('invalid')));
   assert(rows[0].errors.some((x) => x.includes('original case')));
+});
+
+test('CSV defaults missing inward dates only for New entries', () => {
+  const header =
+    'Request ID,Client Name,PAN No,Latest Status,Entry Type,Reference ID,Inward Date\n';
+  const [fresh, related] = parseCsv(
+    header +
+      'REQ-1,Client,ABCDE1234F,Request Received from CSE,New,,\n' +
+      'REQ-2,Client,ABCDE1234F,Request Received from CSE,Resubmission,REF-1,\n',
+    user,
+    meta,
+    new Set(['ref-1']),
+  );
+  assert.equal(fresh.payload.inwardDate, meta.today);
+  assert.deepEqual(fresh.errors, []);
+  assert.equal(related.payload.inwardDate, '');
+  assert(related.errors.includes('Inward date is required'));
 });
 
 test('CSV imports dedicated process dates and review fields without accepting a touch count', () => {

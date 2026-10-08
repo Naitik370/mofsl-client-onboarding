@@ -13,6 +13,7 @@ public sealed class CaseService(Database database, TimeProvider clock)
         using var db = database.Open();
         return new
         {
+            today = Now()[..10],
             statuses = Query(db, "SELECT status_name AS status,stage FROM status_master ORDER BY id"),
             locations = Query(db, "SELECT location_name AS name FROM location_master ORDER BY id").Select(x => x.Text("name")),
             segments = Query(db, "SELECT segment_name AS name FROM segment_master ORDER BY id").Select(x => x.Text("name")),
@@ -54,7 +55,11 @@ public sealed class CaseService(Database database, TimeProvider clock)
         using var transaction = db.BeginTransaction();
 
         if (entryId is null && payload.Text("entryType") == "New")
+        {
+            if (payload.Text("inwardDate") == "")
+                payload["inwardDate"] = now[..10];
             payload["referenceId"] = GenerateReferenceId(db, now);
+        }
 
         var context = AccessContext(db, payload.Text("referenceId"), entryId);
         var accessErrors = CaseAccessPolicy.AccessErrors(payload, user, context);

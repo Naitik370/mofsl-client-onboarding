@@ -141,6 +141,11 @@ export function CaseEntry({ user, meta, cases, selected, onSaved, onClear, onErr
         {name === 'referenceId' && (
           <small>Generated for New entries. Use an existing ID for related entries.</small>
         )}
+        {name === 'inwardDate' && (
+          <small>
+            Defaults to today for a New case. Correct it if Operations received the request earlier.
+          </small>
+        )}
       </label>
     );
   }
