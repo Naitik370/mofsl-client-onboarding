@@ -183,6 +183,7 @@ function App() {
               meta={meta}
               filters={workspace.filters}
               onFilter={workspace.setFilters}
+              mofslOnly={user.role === 'mofsl'}
             />
           )}
           {view === 'analysis' && (
@@ -190,6 +191,7 @@ function App() {
               report={report}
               dimension={workspace.dimension}
               onDimension={workspace.setDimension}
+              mofslOnly={user.role === 'mofsl'}
             />
           )}
           {view === 'cases' && (

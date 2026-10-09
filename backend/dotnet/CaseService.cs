@@ -101,6 +101,7 @@ public sealed class CaseService(Database database, TimeProvider clock)
         PreserveAdditionalFields(db, payload, entryId);
         StatusAutomation.Apply(payload, previous);
         SynchronizeSendingDates(payload);
+        FillStatusBusinessDate(payload, previous, entryId, now);
         accessErrors = CaseAccessPolicy.AccessErrors(payload, user, context);
         if (accessErrors.Count > 0)
             return (403, new
@@ -145,6 +146,22 @@ public sealed class CaseService(Database database, TimeProvider clock)
         if (user.Role == "mofsl")
             payload["owner"] = "MOFSL";
         return payload;
+    }
+
+    private static void FillStatusBusinessDate(Dictionary<string, object?> payload, Dictionary<string, object?>? previous, long? entryId, string now)
+    {
+        if (payload.Text("statusDate") != "")
+            return;
+        if (entryId is not null && previous is not null && payload.Text("status") == previous.Text("status") && previous.Text("statusDate") != "")
+        {
+            payload["statusDate"] = previous.Text("statusDate");
+            return;
+        }
+        var field = CaseValidator.RequiredFields(payload.Text("status")).Keys.FirstOrDefault(key => DateFields.Contains(key) || EntryFields.Dates.ContainsKey(key));
+        if (previous is null && payload.Text("status") is "Request Received from CSE" or "Under Review by Operations")
+            field = "inwardDate";
+        payload["statusDate"] = field is not null && Date(payload.Text(field)) is not null && payload.Text(field) != previous?.Text(field)
+            ? payload.Text(field) : now[..10];
     }
 
     private static string GenerateReferenceId(SqliteConnection db, string now)
@@ -291,18 +308,6 @@ public sealed class CaseService(Database database, TimeProvider clock)
                 INSERT INTO status_history(case_id, entry_id, event_timestamp, old_status_id, new_status_id,
                 changed_by, owner, event_notes, business_date) VALUES ($0, $1, $2, $3, $4, $5, $6, $7, $8)
                 """,
-                caseId, entryId, now, previousStatusId, statusId, user.DisplayName, payload.Text("owner"), payload.Text("remarks") != "" ? payload.Text("remarks") : payload.Text("queryDetails"), BusinessDate(payload));
-    }
-
-    private static object? BusinessDate(Dictionary<string, object?> payload)
-    {
-        if (payload.Text("statusDate") != "")
-            return payload.Text("statusDate");
-        if (payload.Text("status") == "Request Received from CSE"
-            || payload.Text("status") == "Under Review by Operations" && payload.Text("entryType") == "New")
-            return payload.Text("inwardDate");
-        if (ProcessDateFields.TryGetValue(payload.Text("status"), out var field) && payload.Text(field) != "")
-            return payload.Text(field);
-        return null; // Legacy/undated events retain audit-date fallback, visibly marked in reports.
+                caseId, entryId, now, previousStatusId, statusId, user.DisplayName, payload.Text("owner"), payload.Text("remarks") != "" ? payload.Text("remarks") : payload.Text("queryDetails"), payload.Text("statusDate"));
     }
 }

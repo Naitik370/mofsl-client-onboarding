@@ -85,6 +85,13 @@ export const dateLabels: Record<string, string> = {
   communicationSentDate: 'Communication sent date',
 };
 export const dateFields = Object.keys(dateLabels);
+export function statusBusinessDateField(status: string, meta: Meta) {
+  if (['Request Received from CSE', 'Under Review by Operations'].includes(status))
+    return 'inwardDate';
+  return Object.keys(
+    meta.statuses.find((item) => item.status === status)?.requiredFields || {},
+  ).find((field) => dateFields.includes(field));
+}
 const stageDateFields: Record<string, string[]> = {
   'Stage 1': ['resubmissionDate', 'stage1QueryRaisedDate', 'stage1ResubmissionDate'],
   'Stage 2': [
@@ -238,6 +245,7 @@ export function defaults(user: User, meta: Meta): Record<string, string> {
     processorName: '',
     owner: user.role === 'mofsl' ? 'MOFSL' : 'Operations',
     inwardDate: user.role === 'mofsl' ? '' : today,
+    statusDate: today,
     outwardDate: '',
     resubmissionDate: '',
     signedFormDate: '',

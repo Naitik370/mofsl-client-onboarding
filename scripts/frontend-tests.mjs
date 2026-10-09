@@ -40,10 +40,14 @@ const { CaseEntry } = await import(
     './shared': sharedModule,
   })
 );
-const { CaseRegister } = await import(
+const { CaseRegister, Performance, Dashboard } = await import(
   componentModule('../frontend/components/ReportingViews.tsx', {
     '../lib': libModule,
     './shared': sharedModule,
+    './PerformanceCharts': componentModule('../frontend/components/PerformanceCharts.tsx', {
+      '../lib': libModule,
+      './shared': sharedModule,
+    }),
     './CaseDetails': componentModule('../frontend/components/CaseDetails.tsx', {
       '../lib': libModule,
       './shared': sharedModule,
@@ -63,6 +67,7 @@ const {
   dateFields,
   latestCaseEntries,
   fieldValidationErrors,
+  statusBusinessDateField,
 } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const user = { id: 1, username: 'operations', displayName: 'Operations Demo', role: 'operations' };
 const meta = {
@@ -81,6 +86,138 @@ const valid = {
   pan: 'ABCDE1234F',
   inwardDate: '2026-07-01',
 };
+
+test('MOFSL reporting shows only Stage 5/6 pipeline and stage TAT rows', () => {
+  const report = {
+    summary: { rejected: 0, cancelled: 0 },
+    cases: [],
+    pipeline: Array.from({ length: 6 }, (_, i) => ({
+      stage: `Stage ${i + 1}`,
+      count: i < 4 ? 0 : 2,
+      averageAging: 1,
+      averageStageTat: 1,
+    })),
+    groups: [{ name: 'MOFSL group', stage1Queries: 0, stage3Queries: 0, stage5Queries: 2 }],
+    stageSlaDays: {},
+  };
+  const dashboard = renderToStaticMarkup(
+    createElement(Dashboard, { report, meta, mofslOnly: true }),
+  );
+  const performance = renderToStaticMarkup(
+    createElement(Performance, {
+      report,
+      dimension: 'location',
+      onDimension: () => {},
+      mofslOnly: true,
+    }),
+  );
+  const details = renderToStaticMarkup(
+    createElement(CaseDetails, {
+      row: { referenceId: 'REF-5' },
+      report,
+      onClose: () => {},
+      mofslOnly: true,
+    }),
+  );
+  for (let stage = 1; stage <= 4; stage++) {
+    assert(!dashboard.includes(`Stage ${stage}`));
+    assert(!performance.includes(`Stage ${stage}`));
+    assert(!details.includes(`Stage ${stage}`));
+  }
+  assert(dashboard.includes('Stage 5') && dashboard.includes('Stage 6'));
+  assert(details.includes('Stage 5') && details.includes('Stage 6'));
+  assert(performance.includes('Stage 5') && !performance.includes('CSE-side queries'));
+  const normal = renderToStaticMarkup(createElement(Dashboard, { report, meta }));
+  assert(normal.includes('Stage 1') && normal.includes('Stage 4'));
+});
+
+test('performance charts display API aggregates alongside the exact MIS values', () => {
+  const report = {
+    groups: [
+      {
+        name: 'Test CSE',
+        total: 10,
+        open: 6,
+        closed: 3,
+        exceptions: 1,
+        rftPercent: 66.7,
+        averageNetTat: 8.4,
+        stage1Queries: 2,
+        stage3Queries: 3,
+        stage5Queries: 1,
+      },
+      {
+        name: 'Long & <safe> location name',
+        total: 2,
+        open: 2,
+        closed: 0,
+        exceptions: 0,
+        rftPercent: 100,
+        averageNetTat: 2,
+        stage1Queries: 0,
+        stage3Queries: 0,
+        stage5Queries: 0,
+      },
+    ],
+  };
+  const html = renderToStaticMarkup(
+    createElement(Performance, { report, dimension: 'cseName', onDimension: () => {} }),
+  );
+  assert.equal((html.match(/role="img"/g) || []).length, 4);
+  for (const title of [
+    'Case volume',
+    'Right first time',
+    'Average net TAT',
+    'Queries by stage',
+    'Detailed performance MIS',
+  ])
+    assert(html.includes(title));
+  assert(html.includes('width:66.7%'));
+  assert(html.includes('RFT rate 66.7%'));
+  assert(html.includes('Average net TAT 8.4d'));
+  assert(html.includes('Stage 1 2, Stage 3 3, Stage 5 1'));
+  assert(html.includes('width:60%'));
+  assert(html.includes('width:50%'));
+  assert(html.includes('Long &amp; &lt;safe&gt; location name'));
+  assert(!html.includes('NaN') && !html.includes('Infinity'));
+  assert(html.indexOf('Case volume') < html.indexOf('<table>'));
+  for (const [dimension, label] of [
+    ['location', 'Location'],
+    ['segment', 'Vertical / Segment'],
+  ]) {
+    const grouped = renderToStaticMarkup(
+      createElement(Performance, { report, dimension, onDimension: () => {} }),
+    );
+    assert(grouped.includes(`Charts and detailed MIS by ${label}.`));
+  }
+});
+
+test('performance charts handle loading, no matches, and groups with zero values', () => {
+  const render = (report) =>
+    renderToStaticMarkup(
+      createElement(Performance, { report, dimension: 'location', onDimension: () => {} }),
+    );
+  assert(render(null).includes('Loading performance charts...'));
+  const empty = render({ groups: [] });
+  assert.equal((empty.match(/No matching cases to chart\./g) || []).length, 4);
+  const zero = render({
+    groups: [
+      {
+        name: 'Empty group',
+        open: 0,
+        closed: 0,
+        exceptions: 0,
+        rftPercent: 0,
+        averageNetTat: 0,
+        stage1Queries: 0,
+        stage3Queries: 0,
+        stage5Queries: 0,
+      },
+    ],
+  });
+  assert(zero.includes('width:0%'));
+  assert(!zero.includes('NaN') && !zero.includes('Infinity'));
+});
 
 const processStatuses = [
   [
@@ -155,6 +292,19 @@ const workflowMeta = {
     },
   ],
 };
+
+test('business date defaults to the server date and uses the matching action date field', () => {
+  for (const role of ['admin', 'operations', 'cse', 'mofsl'])
+    assert.equal(defaults({ ...user, role }, meta).statusDate, meta.today);
+  for (const [status, , field] of processStatuses)
+    assert.equal(statusBusinessDateField(status, workflowMeta), field);
+  assert.equal(statusBusinessDateField('Under Review - Signed Form', workflowMeta), undefined);
+  assert.equal(
+    statusBusinessDateField('Form Found in Order - Ready for MOFSL Submission', workflowMeta),
+    undefined,
+  );
+  assert.equal(statusBusinessDateField('Request Received from CSE', workflowMeta), 'inwardDate');
+});
 
 test('API requirements mark and validate only the selected action fields', () => {
   for (const [status, , field, label] of processStatuses) {

@@ -10,6 +10,7 @@ export function CaseDetails({
   history = [],
   onEdit,
   editLabel = 'Edit latest entry',
+  mofslOnly = false,
 }: {
   row: Row;
   report: Report | null;
@@ -18,6 +19,7 @@ export function CaseDetails({
   history?: Row[];
   onEdit?: () => void;
   editLabel?: string;
+  mofslOnly?: boolean;
 }) {
   const drawer = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -88,12 +90,24 @@ export function CaseDetails({
             ['Stage 1 queries', row.stage1Queries],
             ['Stage 3 discrepancies / returns', row.stage3Queries],
             ['MOFSL queries', row.stage5Queries],
-          ].map(([label, value]) => (
-            <div key={text(label)}>
-              <dt>{text(label)}</dt>
-              <dd>{text(value)}</dd>
-            </div>
-          ))}
+          ]
+            .filter(
+              ([label]) =>
+                !mofslOnly ||
+                ![
+                  'Discrepancy type',
+                  'Stage 4 outcome',
+                  'Stage 1 query details',
+                  'Stage 1 queries',
+                  'Stage 3 discrepancies / returns',
+                ].includes(text(label)),
+            )
+            .map(([label, value]) => (
+              <div key={text(label)}>
+                <dt>{text(label)}</dt>
+                <dd>{text(value)}</dd>
+              </div>
+            ))}
         </dl>
         {row.timingUsesAuditDates && (
           <p className="report-note">
@@ -107,7 +121,10 @@ export function CaseDetails({
           </p>
         )}
         <Table headings={['Stage', 'Gross working days', 'SLA days', 'Breach']}>
-          {Array.from({ length: 6 }, (_, i) => `Stage ${i + 1}`).map((stage) => (
+          {Array.from(
+            { length: mofslOnly ? 2 : 6 },
+            (_, i) => `Stage ${i + (mofslOnly ? 5 : 1)}`,
+          ).map((stage) => (
             <tr key={stage}>
               <td>{stage}</td>
               <td>{stageTat?.[stage] ?? 'Not observed'}</td>

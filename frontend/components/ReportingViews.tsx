@@ -13,17 +13,20 @@ import { routeHash } from '../navigation';
 import { dimensionLabels, Panel, Status, Table, text } from './shared';
 import type { DateRange } from '../useWorkspace';
 import { CaseDetails } from './CaseDetails';
+import { PerformanceCharts } from './PerformanceCharts';
 
 export function Overview({
   report,
   meta,
   filters,
   onFilter,
+  mofslOnly = false,
 }: {
   report: Report | null;
   meta: Meta;
   filters: DateRange;
   onFilter: (range: DateRange) => void;
+  mofslOnly?: boolean;
 }) {
   const [dates, setDates] = useState(filters);
   return (
@@ -67,7 +70,7 @@ export function Overview({
           Clear
         </button>
       </div>
-      {report && <Dashboard report={report} meta={meta} />}
+      {report && <Dashboard report={report} meta={meta} mofslOnly={mofslOnly} />}
     </section>
   );
 }
@@ -76,34 +79,39 @@ export function Performance({
   report,
   dimension,
   onDimension,
+  mofslOnly = false,
 }: {
   report: Report | null;
   dimension: string;
   onDimension: (dimension: string) => void;
+  mofslOnly?: boolean;
 }) {
   const columns = [
-    'name',
-    'total',
-    'open',
-    'closed',
-    'rft',
-    'nrft',
-    'rftPercent',
-    'averageNetTat',
-    'slaBreaches',
-    'exceptions',
-    'stage1Queries',
-    'stage3Queries',
-    'stage5Queries',
-    'cseQueries',
-    'mofslQueries',
-    'stageSlaBreaches',
-  ];
+    ['name', dimensionLabels[dimension]],
+    ['total', 'Total'],
+    ['open', 'Open'],
+    ['closed', 'Closed'],
+    ['rft', 'RFT'],
+    ['nrft', 'NRFT'],
+    ['rftPercent', 'RFT %'],
+    ['averageNetTat', 'Avg Net TAT'],
+    ['slaBreaches', 'SLA Breaches'],
+    ['exceptions', 'Exceptions'],
+    ['stage1Queries', 'Stage 1 queries'],
+    ['stage3Queries', 'Stage 3 queries'],
+    ['stage5Queries', 'Stage 5 queries'],
+    ['cseQueries', 'CSE-side queries'],
+    ['mofslQueries', 'MOFSL-side queries'],
+    ['stageSlaBreaches', 'Stage SLA cases'],
+  ].filter(
+    ([key]) => !mofslOnly || !['stage1Queries', 'stage3Queries', 'cseQueries'].includes(key),
+  );
   return (
-    <section className="view active">
+    <section className="view active performance-view">
       <div className="section-heading">
         <div>
-          <h2>Performance MIS</h2>
+          <h2>Compare performance</h2>
+          <p>Charts and detailed MIS by {dimensionLabels[dimension]}.</p>
         </div>
         <div className="segmented" role="group" aria-label="MIS dimension">
           {Object.entries(dimensionLabels).map(([key, label]) => (
@@ -118,31 +126,23 @@ export function Performance({
           ))}
         </div>
       </div>
-      <Panel>
-        <Table
-          headings={[
-            dimensionLabels[dimension],
-            'Total',
-            'Open',
-            'Closed',
-            'RFT',
-            'NRFT',
-            'RFT %',
-            'Avg Net TAT',
-            'SLA Breaches',
-            'Exceptions',
-            'Stage 1 queries',
-            'Stage 3 queries',
-            'Stage 5 queries',
-            'CSE-side queries',
-            'MOFSL-side queries',
-            'Stage SLA cases',
-          ]}
-          empty={!report?.groups.length}
-        >
+      {report ? (
+        <PerformanceCharts
+          report={report}
+          dimension={dimensionLabels[dimension]}
+          mofslOnly={mofslOnly}
+        />
+      ) : (
+        <p role="status">Loading performance charts...</p>
+      )}
+      <Panel
+        title="Detailed performance MIS"
+        note="The table contains the exact values behind the charts and additional SLA metrics."
+      >
+        <Table headings={columns.map(([, label]) => label)} empty={!report?.groups.length}>
           {report?.groups.map((row) => (
             <tr key={text(row.name)}>
-              {columns.map((key) => (
+              {columns.map(([key]) => (
                 <td key={key}>
                   {text(row[key])}
                   {key === 'rftPercent' ? '%' : key === 'averageNetTat' ? 'd' : ''}
@@ -291,6 +291,7 @@ export function CaseRegister({
         <CaseDetails
           row={{ ...details, ...derived.get(details.caseId) }}
           report={metrics}
+          mofslOnly={user.role === 'mofsl'}
           entries={cases.filter((row) => row.caseId === details.caseId)}
           history={history.filter((row) => text(row.referenceId) === text(details.referenceId))}
           onEdit={user.role === 'viewer' ? undefined : () => onEdit(details)}
@@ -351,7 +352,15 @@ export function AuditHistory({ history }: { history: Row[] }) {
   );
 }
 
-export function Dashboard({ report, meta }: { report: Report; meta: Meta }) {
+export function Dashboard({
+  report,
+  meta,
+  mofslOnly = false,
+}: {
+  report: Report;
+  meta: Meta;
+  mofslOnly?: boolean;
+}) {
   const s = report.summary;
   const kpis = [
     ['Open cases', s.open, '', ''],
@@ -371,7 +380,10 @@ export function Dashboard({ report, meta }: { report: Report; meta: Meta }) {
       'bad',
     ],
   ];
-  const max = Math.max(1, ...report.pipeline.map((x) => x.count));
+  const pipeline = report.pipeline.filter(
+    (row) => !mofslOnly || ['Stage 5', 'Stage 6'].includes(row.stage),
+  );
+  const max = Math.max(1, ...pipeline.map((x) => x.count));
   const attention = report.cases
     .filter(
       (row) =>
@@ -393,7 +405,7 @@ export function Dashboard({ report, meta }: { report: Report; meta: Meta }) {
       <div className="dashboard-grid">
         <Panel title="Stage Pipeline">
           <div className="pipeline-list">
-            {report.pipeline.map((row) => (
+            {pipeline.map((row) => (
               <div key={row.stage} className="pipeline-row">
                 <span>{row.stage}</span>
                 <div className="bar-track">

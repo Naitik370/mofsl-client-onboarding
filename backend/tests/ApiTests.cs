@@ -20,6 +20,50 @@ public sealed class ApiTests : IDisposable
         public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
     }
 
+    [Fact]
+    public void MissingBusinessDatesUseTheProcessDateOrServerDateAndPreserveExplicitAndExistingDates()
+    {
+        var service = new CaseService(database, new FixedClock(new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero)));
+        var payload = Base();
+        var created = Json(service.SaveCase(payload, Operations).Body);
+        Assert.Equal("2026-07-01", created.GetProperty("statusDate").GetString());
+        var id = created.GetProperty("id").GetInt64();
+        payload["autoStatus"] = false;
+        foreach (var (status, field) in new[] {
+            ("Application Form Under Preparation", "formPreparedDate"),
+            ("Signed Form Received from CSE", "signedFormDate"),
+            ("Submitted to MOFSL", "submittedDate") })
+        {
+            payload["status"] = status;
+            payload[field] = "2026-10-08";
+            var response = service.SaveCase(payload, Operations, id);
+            Assert.Equal(200, response.Status);
+            Assert.Equal("2026-10-08", Json(response.Body).GetProperty("statusDate").GetString());
+            Assert.Equal("2026-10-08", Json(service.GetHistory(Operations))[0].GetProperty("businessDate").GetString());
+        }
+        payload["status"] = "Under Review - Signed Form";
+        var saved = Json(service.SaveCase(payload, Operations, id).Body);
+        Assert.Equal("2026-10-09", saved.GetProperty("statusDate").GetString());
+        var later = new CaseService(database, new FixedClock(new DateTimeOffset(2026, 10, 12, 12, 0, 0, TimeSpan.Zero)));
+        saved = Json(later.SaveCase(payload, Operations, id).Body);
+        Assert.Equal("2026-10-09", saved.GetProperty("statusDate").GetString());
+        payload["statusDate"] = "2026-10-07";
+        saved = Json(later.SaveCase(payload, Operations, id).Body);
+        Assert.Equal("2026-10-07", saved.GetProperty("statusDate").GetString());
+        payload["status"] = "On Hold";
+        payload.Remove("statusDate");
+        saved = Json(later.SaveCase(payload, Operations, id).Body);
+        Assert.Equal("2026-10-12", saved.GetProperty("statusDate").GetString());
+        payload["status"] = "Signed Form Received from CSE";
+        // A copied receipt date is not a new event; selecting its status again uses today's date.
+        saved = Json(later.SaveCase(payload, Operations, id).Body);
+        Assert.Equal("2026-10-12", saved.GetProperty("statusDate").GetString());
+        var historyCount = Json(later.GetHistory(Operations)).GetArrayLength();
+        payload["statusDate"] = "2026-02-30";
+        Assert.Equal(400, later.SaveCase(payload, Operations, id).Status);
+        Assert.Equal(historyCount, Json(later.GetHistory(Operations)).GetArrayLength());
+    }
+
     [Theory]
     [InlineData("Query Raised to CSE - Missing Information", "stage1QueryRaisedDate")]
     [InlineData("Resubmitted by CSE", "stage1ResubmissionDate")]

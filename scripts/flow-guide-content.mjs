@@ -313,6 +313,7 @@ export const topics = [
     summary: 'CSE sends the request; Operations checks whether information is complete.',
     user: [
       'A New CSE form shows Request Received from CSE. Saving automatically changes it to Under Review by Operations.',
+      'Status Business Date fills when a status is selected and follows its process date. Edit it for a backdated event; the API also supplies an omitted business date.',
       'New process dates select completed-action statuses automatically on save. Choosing Latest status manually disables this option. Operations selects queries, review initiation, and exceptions deliberately.',
       'A CSE update shows the current query status and selects the Resubmission entry type. Saving applies Resubmitted by CSE.',
     ],
@@ -733,7 +734,7 @@ export const topics = [
       'Admin automatic capture fills blank generic and dedicated status dates without replacing supplied dates.',
     ],
     data: 'Manual process-date fields and audit event timestamps are separate.',
-    note: 'An explicit Status business date takes precedence, then the dedicated date for that status. Undated events fall back to audit dates and are marked in Case Details.',
+    note: 'An explicit Status business date takes precedence. Omitted dates use a newly supplied process date or the server date; initial receipts use Inward Date. Same-status edits preserve the existing business date. Historical undated events still use audit dates.',
     sources: [
       {
         file: 'backend/dotnet/CaseService.cs',
@@ -754,7 +755,7 @@ export const topics = [
       },
       {
         file: 'backend/dotnet/CaseService.cs',
-        marker: 'private static object? BusinessDate',
+        marker: 'private static void FillStatusBusinessDate',
       },
     ],
   },
@@ -950,10 +951,13 @@ export const topics = [
       'Performance MIS changes the grouping dimension without changing the calculation rules.',
     user: [
       'Choose CSE, Location, or Vertical / Segment.',
+      'Compare case volume, RFT rate, average net TAT, and queries by stage in the charts. Read the detailed table for exact values and SLA metrics.',
+      'MOFSL sees Stages 5 and 6 in the pipeline and stage TAT table. Its Analysis query chart and columns show MOFSL queries instead of empty earlier stages.',
       'Compare totals, RFT/NRFT, net TAT, overall/stage SLA cases, and Stage 1/3/5 query attribution.',
     ],
     system: [
       'React updates dimension and triggers a workspace reload.',
+      'Charts use the API group values, with a fixed 0–100% RFT scale and a shared scale across groups within each count or TAT chart.',
       'The API permits cseName, location, or segment and defaults unsupported dimensions to cseName.',
       'Groups use the same rejection/cancellation exclusions; missing grouping values appear as Unassigned.',
     ],

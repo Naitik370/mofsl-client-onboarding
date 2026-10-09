@@ -12,6 +12,7 @@ import {
   reviewOutcomes,
   defaults,
   submissionPayload,
+  statusBusinessDateField,
   entryTypes,
   mofslStatuses,
   owners,
@@ -42,7 +43,7 @@ function initialEntry(user: User, meta: Meta, selected: Row | null) {
     autoStatus: 'true',
   };
   if (selected && ['cse', 'mofsl'].includes(user.role)) {
-    payload.statusDate = '';
+    payload.statusDate = defaults(user, meta).statusDate;
     payload.entryType = user.role === 'cse' ? 'Resubmission' : 'Modification';
     payload.owner = user.role === 'cse' ? 'Operations' : 'MOFSL';
     if (
@@ -52,6 +53,7 @@ function initialEntry(user: User, meta: Meta, selected: Row | null) {
       payload.entryType = 'Discrepancy Resolution';
     }
   }
+  if (!payload.statusDate) payload.statusDate = defaults(user, meta).statusDate;
   return payload;
 }
 
@@ -73,6 +75,7 @@ export function CaseEntry({
   });
   const [busy, setBusy] = useState(false);
   const [showAllDates, setShowAllDates] = useState(false);
+  const [automaticBusinessDate, setAutomaticBusinessDate] = useState(true);
   const dirty = JSON.stringify(form) !== JSON.stringify(initialForm);
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -121,28 +124,41 @@ export function CaseEntry({
     .map((item) => item.status);
 
   function changeField(name: string, value: string) {
+    if (name === 'statusDate') setAutomaticBusinessDate(false);
+    if (name === 'status') setAutomaticBusinessDate(true);
+    const today = defaults(user, meta).statusDate;
     setErrors((current) => ({ ...current, fields: { ...current.fields, [name]: [] } }));
     const queryResponse =
       user.role === 'cse' &&
       name === 'referenceId' &&
       cases.find((row) => text(row.referenceId).toLowerCase() === value.trim().toLowerCase())
         ?.status === 'Query Raised to CSE - Missing Information';
-    setForm((current) => ({
-      ...current,
-      [name]: value,
-      ...(name === 'status' ? { statusDate: '', autoStatus: 'false' } : {}),
-      ...(name === 'entryType' && value === 'New' && !referenceLocked ? { referenceId: '' } : {}),
-      ...(user.role === 'cse' && name === 'entryType' && value === 'New'
-        ? { status: 'Request Received from CSE', statusDate: '' }
-        : {}),
-      ...(queryResponse
-        ? {
-            entryType: 'Resubmission',
-            status: 'Query Raised to CSE - Missing Information',
-            statusDate: '',
-          }
-        : {}),
-    }));
+    setForm((current) => {
+      const next: Record<string, string> = {
+        ...current,
+        [name]: value,
+        ...(name === 'status' ? { statusDate: today, autoStatus: 'false' } : {}),
+        ...(name === 'entryType' && value === 'New' && !referenceLocked ? { referenceId: '' } : {}),
+        ...(user.role === 'cse' && name === 'entryType' && value === 'New'
+          ? { status: 'Request Received from CSE', statusDate: today }
+          : {}),
+        ...(queryResponse
+          ? {
+              entryType: 'Resubmission',
+              status: 'Query Raised to CSE - Missing Information',
+              statusDate: today,
+            }
+          : {}),
+      };
+      const target =
+        cases.find(
+          (row) => text(row.referenceId).toLowerCase() === next.referenceId.toLowerCase(),
+        ) || selected;
+      const effective = submissionPayload(next, user, target).status;
+      if (automaticBusinessDate && name === statusBusinessDateField(effective, meta))
+        next.statusDate = value || today;
+      return next;
+    });
   }
 
   function showErrors(messages: string[]) {
@@ -345,6 +361,10 @@ export function CaseEntry({
             <div className="form-grid">
               {field('status', 'Latest status *', allowedStatuses, 'text', true)}
               {field('statusDate', 'Status business date', undefined, 'date')}
+              <p className="report-note wide">
+                Status Business Date fills automatically when the status changes and follows its
+                process date. Edit it for a backdated event.
+              </p>
               <div className="calculated-field">
                 <span>Current Stage</span>
                 <output>{form.stageOverride || text(selected?.derivedStage) || stage}</output>
