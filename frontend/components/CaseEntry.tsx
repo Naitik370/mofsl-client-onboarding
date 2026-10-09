@@ -124,10 +124,19 @@ export function CaseEntry({
     .map((item) => item.status);
 
   function changeField(name: string, value: string) {
+    const foundInOrder =
+      name === 'status' && value === 'Form Found in Order - Ready for MOFSL Submission';
     if (name === 'statusDate') setAutomaticBusinessDate(false);
     if (name === 'status') setAutomaticBusinessDate(true);
     const today = defaults(user, meta).statusDate;
-    setErrors((current) => ({ ...current, fields: { ...current.fields, [name]: [] } }));
+    setErrors((current) => ({
+      ...current,
+      fields: {
+        ...current.fields,
+        [name]: [],
+        ...(foundInOrder ? { stage4ReviewOutcome: [] } : {}),
+      },
+    }));
     const queryResponse =
       user.role === 'cse' &&
       name === 'referenceId' &&
@@ -138,6 +147,7 @@ export function CaseEntry({
         ...current,
         [name]: value,
         ...(name === 'status' ? { statusDate: today, autoStatus: 'false' } : {}),
+        ...(foundInOrder ? { stage4ReviewOutcome: 'Found in Order' } : {}),
         ...(name === 'entryType' && value === 'New' && !referenceLocked ? { referenceId: '' } : {}),
         ...(user.role === 'cse' && name === 'entryType' && value === 'New'
           ? { status: 'Request Received from CSE', statusDate: today }

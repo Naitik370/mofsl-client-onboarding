@@ -67,6 +67,8 @@ The routes and camelCase response fields match the former API. Saves return 201 
 
 Enter the channel-specific sending date once. The API copies it into a blank Outward Date, and also accepts legacy Outward Date-only submissions by filling the channel-specific date. Supplied dates are preserved. Outward Date remains available under Show all process dates.
 
+Selecting Form Found in Order - Ready for MOFSL Submission automatically sets the Stage 4 review outcome to Found in Order, including when the previous outcome was Still Pending.
+
 Status Business Date defaults to the server date when a status is selected and follows changes to that status's process date. A manual business-date edit is preserved until another status is selected. When API callers omit it, the API uses a newly supplied matching process date, the original inward date for an initial receipt/review, or the server's local date. Same-status edits preserve the existing business date. Historical undated audit events still use their recorded date in reports.
 
 The six-stage status mappings, Reference ID generation, append-only history, query counting, FIFO query resolution, holiday exclusion, gross-TAT SLA comparison, and rejected/cancelled exclusions are retained. An admin can opt into filling a blank status-related date using the server date. React does not calculate MIS or replace this server date with the browser date.
