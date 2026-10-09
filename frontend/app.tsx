@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { type Row } from './lib';
 import { useWorkspace } from './useWorkspace';
@@ -18,6 +18,9 @@ function App() {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash));
   const { view } = route;
   const dirty = useRef(false);
+  const onDirtyChange = useCallback((value: boolean) => {
+    dirty.current = value;
+  }, []);
   const currentHash = useRef(window.location.hash || '#/dashboard');
   const [entryVersion, setEntryVersion] = useState(0);
   const [toast, setToast] = useState('');
@@ -213,9 +216,7 @@ function App() {
               meta={meta}
               cases={cases}
               selected={selected}
-              onDirtyChange={(value) => {
-                dirty.current = value;
-              }}
+              onDirtyChange={onDirtyChange}
               onClear={() => {
                 if (selected) navigate('cases');
                 else if (discardChanges()) setEntryVersion((version) => version + 1);
