@@ -86,9 +86,6 @@ export function CaseEntry({
     window.addEventListener('beforeunload', beforeUnload);
     return () => window.removeEventListener('beforeunload', beforeUnload);
   }, [dirty]);
-  const stage = meta.statuses.find((item) => item.status === form.status)?.stage || '';
-  const visibleDates = visibleDateFields(stage, form.channel, showAllDates);
-  const additionalDates = dateFields.slice(7).filter((name) => visibleDates.includes(name));
   const [editingId] = useState(() =>
     selected && ['admin', 'operations'].includes(user.role) ? Number(selected.id) : null,
   );
@@ -98,6 +95,17 @@ export function CaseEntry({
     selected;
   const cseQueryResponse =
     user.role === 'cse' && currentCase?.status === 'Query Raised to CSE - Missing Information';
+  const effectiveStatus = submissionPayload(form, user, currentCase).status;
+  const statusMeta = meta.statuses.find((item) => item.status === effectiveStatus);
+  const stage = statusMeta?.stage || '';
+  const requiredFields = statusMeta?.requiredFields || {};
+  const visibleDates = [
+    ...new Set([
+      ...visibleDateFields(stage, form.channel, showAllDates),
+      ...Object.keys(requiredFields).filter((field) => dateFields.includes(field)),
+    ]),
+  ].filter((field) => field !== 'outwardDate' || showAllDates);
+  const additionalDates = dateFields.slice(7).filter((name) => visibleDates.includes(name));
   const allowedStatuses = meta.statuses
     .filter((item) =>
       user.role === 'cse'
@@ -196,6 +204,7 @@ export function CaseEntry({
     required = false,
     readOnly = false,
   ) {
+    required ||= name in requiredFields;
     const messages = errors.fields[name] || [];
     const accessibility = {
       id: `case-${name}`,
@@ -209,6 +218,7 @@ export function CaseEntry({
         className={['status', 'queryDetails', 'remarks'].includes(name) ? 'wide' : undefined}
       >
         {label}
+        {required && !label.endsWith(' *') ? ' *' : ''}
         {choices ? (
           <select
             {...accessibility}
@@ -243,6 +253,7 @@ export function CaseEntry({
             rows={3}
             value={form[name] || ''}
             onChange={(event) => changeField(name, event.target.value)}
+            required={required}
           />
         ) : (
           <input
@@ -405,6 +416,11 @@ export function CaseEntry({
                     )}
                   </div>
                 </details>
+              )}
+              {stage === 'Stage 2' && (
+                <p className="report-note wide">
+                  The sending date also fills a blank Outward Date in the register.
+                </p>
               )}
               {user.role === 'admin' && (
                 <label className="wide auto-date-control">

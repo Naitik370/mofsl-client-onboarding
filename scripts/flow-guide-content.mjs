@@ -346,14 +346,15 @@ export const topics = [
     roles: ['admin', 'operations'],
     summary: 'Prepare the application form and send it through the chosen channel.',
     user: [
-      'Record Application Form Under Preparation.',
-      'For Physical channel, record Physical Form Submitted to CSE.',
-      'For Digital channel, record Digital Form Sent to Client. Enter the outward date manually unless admin opts into auto-capture.',
+      'Record Application Form Under Preparation and its required form prepared date.',
+      'For Physical channel, record Physical Form Submitted to CSE and its submission date.',
+      'For Digital channel, record Digital Form Sent to Client and its sending date. The API also fills a blank Outward Date; enter the date once.',
     ],
     system: [
       'Status Master derives Stage 2 from the selected status.',
       'CaseValidator rejects physical submission with a Digital channel and digital sending with a Physical channel.',
-      'Admin auto-capture fills a blank outwardDate for either sending status.',
+      'Status metadata supplies required-field labels for React forms and CSV validation. The API validates the final status and process date before writing.',
+      'Admin auto-capture fills blank related dates for either sending status. Supplied dates are preserved.',
     ],
     data: 'cases.channel + case_entries.outward_date + status_history new status.',
     note: 'Preparation/sending statuses do not themselves raise query count.',
@@ -415,7 +416,7 @@ export const topics = [
     summary: 'CSE provides the correction; Operations confirms readiness.',
     user: [
       'CSE uses Add update. A discrepancy/return response automatically selects Discrepancy Resolution and Discrepancy Resolution Received. Operations can use dated receipts or a Found in Order review outcome to select the next status automatically.',
-      'Operations checks the response and records Form Found in Order - Ready for MOFSL Submission.',
+      'Operations checks the response and records Form Found in Order - Ready for MOFSL Submission with the required Found in Order review outcome.',
     ],
     system: [
       'CSE creates a related row rather than editing an earlier operational entry.',

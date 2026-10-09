@@ -14,7 +14,12 @@ public sealed class CaseService(Database database, TimeProvider clock)
         return new
         {
             today = Now()[..10],
-            statuses = Query(db, "SELECT status_name AS status,stage FROM status_master ORDER BY id"),
+            statuses = Query(db, "SELECT status_name AS status,stage FROM status_master ORDER BY id").Select(row => new
+            {
+                status = row.Text("status"),
+                stage = row.Text("stage"),
+                requiredFields = CaseValidator.RequiredFields(row.Text("status"))
+            }),
             locations = Query(db, "SELECT location_name AS name FROM location_master ORDER BY id").Select(x => x.Text("name")),
             segments = Query(db, "SELECT segment_name AS name FROM segment_master ORDER BY id").Select(x => x.Text("name")),
             slaDays = int.Parse(Query(db, "SELECT setting_value FROM settings WHERE setting_key='sla_days'")[0].Text("setting_value"))
@@ -95,6 +100,7 @@ public sealed class CaseService(Database database, TimeProvider clock)
 
         PreserveAdditionalFields(db, payload, entryId);
         StatusAutomation.Apply(payload, previous);
+        SynchronizeSendingDates(payload);
         accessErrors = CaseAccessPolicy.AccessErrors(payload, user, context);
         if (accessErrors.Count > 0)
             return (403, new

@@ -20,6 +20,139 @@ public sealed class ApiTests : IDisposable
         public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
     }
 
+    [Theory]
+    [InlineData("Query Raised to CSE - Missing Information", "stage1QueryRaisedDate")]
+    [InlineData("Resubmitted by CSE", "stage1ResubmissionDate")]
+    [InlineData("Application Form Under Preparation", "formPreparedDate")]
+    [InlineData("Physical Form Submitted to CSE", "physicalFormSubmittedDate")]
+    [InlineData("Digital Form Sent to Client", "digitalFormSentDate")]
+    [InlineData("Signed Form Received from CSE", "signedFormDate")]
+    [InlineData("Discrepancy Raised to CSE", "discrepancyRaisedDate")]
+    [InlineData("Form Returned to CSE", "formReturnedToCseDate")]
+    [InlineData("Discrepancy Resolution Received", "discrepancyResolutionReceivedDate")]
+    [InlineData("Resubmitted Form Received - Under Review", "resubmittedFormReceivedDate")]
+    [InlineData("Submitted to MOFSL", "submittedDate")]
+    [InlineData("Query Raised by MOFSL", "mofslQueryRaisedDate")]
+    [InlineData("Query Resolved - Resubmitted to MOFSL", "mofslQueryResolvedDate")]
+    [InlineData("Account Opened", "accountOpeningDate")]
+    [InlineData("Communication Sent - Case Closed", "communicationSentDate")]
+    public void StatusRequiresItsProcessDateAndRejectedWritesLeaveTheCaseUntouched(string status, string field)
+    {
+        var payload = Base();
+        var original = Json(cases.SaveCase(payload, Operations).Body);
+        var id = original.GetProperty("id").GetInt64();
+        payload["status"] = status;
+        payload["autoStatus"] = false;
+        payload["channel"] = status == "Digital Form Sent to Client" ? "Digital" : "Physical";
+        payload["queryDetails"] = "Missing bank proof";
+        payload["accountNumber"] = "TEST26100001";
+        if (status == "Communication Sent - Case Closed")
+            payload["accountOpeningDate"] = "2026-10-09";
+        Assert.Equal(400, cases.SaveCase(payload, Operations, id).Status);
+        var unchanged = Json(cases.GetCases(Operations))[0];
+        Assert.Equal("Request Received from CSE", unchanged.GetProperty("status").GetString());
+        Assert.Equal(1, unchanged.GetProperty("touchCount").GetInt32());
+        Assert.Single(Json(cases.GetHistory(Operations)).EnumerateArray());
+        payload[field] = "2026-10-09";
+        var result = cases.SaveCase(payload, Operations, id);
+        Assert.Equal(200, result.Status);
+        var saved = Json(result.Body);
+        Assert.Equal(status, saved.GetProperty("status").GetString());
+        Assert.Equal("2026-10-09", saved.GetProperty(field).GetString());
+        Assert.Equal(2, saved.GetProperty("touchCount").GetInt32());
+        Assert.Equal(2, Json(cases.GetHistory(Operations)).GetArrayLength());
+        Assert.Equal("2026-07-01", saved.GetProperty("inwardDate").GetString());
+    }
+
+    [Fact]
+    public async Task DigitalJourneyUsesApiRequirementsAndSavesOneSendingDate()
+    {
+        using var client = Client();
+        await Login(client, "operations", "OpsDemo@123");
+        var meta = await Read(await client.GetAsync("/api/meta"));
+        var sendingRule = meta.GetProperty("statuses").EnumerateArray().Single(item => item.GetProperty("status").GetString() == "Digital Form Sent to Client");
+        Assert.True(sendingRule.GetProperty("requiredFields").TryGetProperty("digitalFormSentDate", out _));
+        Assert.False(sendingRule.GetProperty("requiredFields").TryGetProperty("outwardDate", out _));
+        var payload = Base();
+        payload["channel"] = "Digital";
+        var created = await Read(await client.PostAsJsonAsync("/api/cases", payload));
+        var id = created.GetProperty("id").GetInt64();
+        var reference = created.GetProperty("referenceId").GetString();
+        payload["referenceId"] = reference;
+        payload["autoStatus"] = false;
+        var steps = new[] {
+            ("Application Form Under Preparation", "formPreparedDate", "2026-10-09"),
+            ("Digital Form Sent to Client", "digitalFormSentDate", "2026-10-09"),
+            ("Signed Form Received from CSE", "signedFormDate", "2026-10-09"),
+            ("Under Review - Signed Form", "remarks", "Signatures, PAN and bank proof verified."),
+            ("Form Found in Order - Ready for MOFSL Submission", "stage4ReviewOutcome", "Found in Order"),
+            ("Submitted to MOFSL", "submittedDate", "2026-10-09"),
+            ("Account Opened", "accountOpeningDate", "2026-10-09"),
+            ("Communication Sent - Case Closed", "communicationSentDate", "2026-10-09") };
+        for (var index = 0; index < steps.Length; index++)
+        {
+            var (status, field, value) = steps[index];
+            payload["status"] = status;
+            payload["statusDate"] = "2026-10-09";
+            if (status == "Account Opened")
+                payload["accountNumber"] = "TEST26100001";
+            if (status != "Under Review - Signed Form")
+            {
+                var rejected = await client.PutAsJsonAsync($"/api/cases/{id}", payload);
+                Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+                Assert.Equal(index + 1, (await Read(await client.GetAsync("/api/history"))).GetArrayLength());
+            }
+            payload[field] = value;
+            var response = await client.PutAsJsonAsync($"/api/cases/{id}", payload);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var saved = await Read(response);
+            Assert.Equal(index + 2, saved.GetProperty("touchCount").GetInt32());
+            Assert.Equal(reference, saved.GetProperty("referenceId").GetString());
+            Assert.Equal("2026-07-01", saved.GetProperty("inwardDate").GetString());
+            var history = await Read(await client.GetAsync("/api/history"));
+            Assert.Equal(index + 2, history.GetArrayLength());
+            Assert.Equal("2026-10-09", history[0].GetProperty("businessDate").GetString());
+            if (index >= 1)
+                Assert.Equal("2026-10-09", saved.GetProperty("outwardDate").GetString());
+        }
+        var report = await Read(await client.GetAsync("/api/reports"));
+        var row = report.GetProperty("cases")[0];
+        Assert.Equal(0, row.GetProperty("queryCount").GetInt32());
+        Assert.Equal("RFT", row.GetProperty("rft").GetString());
+    }
+
+    [Fact]
+    public void ReadinessRequiresAnExplicitFoundInOrderOutcome()
+    {
+        var payload = Base("Form Found in Order - Ready for MOFSL Submission");
+        Assert.Equal(400, cases.SaveCase(payload, Operations).Status);
+        payload["stage4ReviewOutcome"] = "Still Pending";
+        Assert.Equal(400, cases.SaveCase(payload, Operations).Status);
+        payload["stage4ReviewOutcome"] = "Found in Order";
+        Assert.Equal(201, cases.SaveCase(payload, Operations).Status);
+    }
+
+    [Theory]
+    [InlineData("Digital", "digitalFormSentDate", "Digital Form Sent to Client")]
+    [InlineData("Physical", "physicalFormSubmittedDate", "Physical Form Submitted to CSE")]
+    public void SendingDatesPreserveSuppliedDatesAndLegacyOutwardOnlySaves(string channel, string field, string status)
+    {
+        var payload = Base(status);
+        payload["channel"] = channel;
+        payload[field] = "2026-10-09";
+        payload["autoCaptureDates"] = true;
+        var saved = Json(cases.SaveCase(payload, Admin).Body);
+        Assert.Equal("2026-10-09", saved.GetProperty("outwardDate").GetString());
+        payload["outwardDate"] = "2026-10-08";
+        saved = Json(cases.SaveCase(payload, Admin).Body);
+        Assert.Equal("2026-10-08", saved.GetProperty("outwardDate").GetString());
+        Assert.Equal("2026-10-09", saved.GetProperty(field).GetString());
+        payload.Remove(field);
+        payload.Remove("autoCaptureDates");
+        saved = Json(cases.SaveCase(payload, Operations).Body);
+        Assert.Equal("2026-10-08", saved.GetProperty(field).GetString());
+    }
+
     [Fact]
     public void ProcessDatesAdvanceStatusesAndManualChoicesAndHistoricalDatesRemainAuthoritative()
     {
@@ -77,6 +210,7 @@ public sealed class ApiTests : IDisposable
         payload["accountNumber"] = "AC-1";
         Assert.Equal("Account Opened", Json(cases.SaveCase(payload, Operations, incomplete.GetProperty("id").GetInt64()).Body).GetProperty("status").GetString());
         payload = Base("Discrepancy Resolution Received");
+        payload["discrepancyResolutionReceivedDate"] = "2026-07-02";
         var saved = Json(cases.SaveCase(payload, Operations).Body);
         payload["stage4ReviewOutcome"] = "Found in Order";
         Assert.Equal("Form Found in Order - Ready for MOFSL Submission", Json(cases.SaveCase(payload, Operations, saved.GetProperty("id").GetInt64()).Body).GetProperty("status").GetString());
@@ -96,6 +230,7 @@ public sealed class ApiTests : IDisposable
     {
         var payload = Base("Discrepancy Raised to CSE");
         payload["queryDetails"] = "Signature mismatch";
+        payload["discrepancyRaisedDate"] = "2026-07-02";
         payload["statusDate"] = "2026-07-02";
         payload["stageOverride"] = "Stage 3";
         var first = Json(cases.SaveCase(payload, Operations).Body);
@@ -104,6 +239,9 @@ public sealed class ApiTests : IDisposable
         payload["status"] = "Resubmitted by CSE";
         payload["statusDate"] = "2026-07-03";
         payload.Remove("stageOverride");
+        Assert.Equal(400, cases.SaveCase(payload, new User(3, "cse", "CSE Demo", "cse")).Status);
+        Assert.Single(Json(cases.GetHistory(Operations)).EnumerateArray());
+        payload["discrepancyResolutionReceivedDate"] = "2026-07-03";
         var response = cases.SaveCase(payload, new User(3, "cse", "CSE Demo", "cse"));
         Assert.Equal(201, response.Status);
         var saved = Json(response.Body);
@@ -189,6 +327,7 @@ public sealed class ApiTests : IDisposable
         payload["status"] = "Query Raised to CSE - Missing Information";
         payload["queryDetails"] = "Missing proof";
         payload["statusDate"] = "2026-07-02";
+        payload["stage1QueryRaisedDate"] = "2026-07-02";
         Assert.Equal(200, cases.SaveCase(payload, Operations, created.GetProperty("id").GetInt64()).Status);
         payload["status"] = "Submitted to MOFSL";
         Assert.Equal(403, cases.SaveCase(payload, cse).Status);
@@ -196,6 +335,9 @@ public sealed class ApiTests : IDisposable
         Assert.Equal(403, cases.SaveCase(payload, new User(6, "other-cse", "Another CSE", "cse")).Status);
         payload["statusDate"] = "2026-07-03";
         // A stale New entry type must still reuse the queried case.
+        Assert.Equal(400, cases.SaveCase(payload, cse).Status);
+        Assert.Equal(2, Json(cases.GetHistory(cse)).GetArrayLength());
+        payload["stage1ResubmissionDate"] = "2026-07-03";
         var result = cases.SaveCase(payload, cse);
         Assert.Equal(201, result.Status);
         var submitted = Json(result.Body);
@@ -241,6 +383,7 @@ public sealed class ApiTests : IDisposable
         explicitDate["status"] = "Resubmitted by CSE";
         Assert.Equal(400, later.SaveCase(explicitDate, Operations).Status);
         explicitDate["inwardDate"] = "2026-07-01";
+        explicitDate["stage1ResubmissionDate"] = "2026-07-11";
         Assert.Equal("2026-07-01", Json(later.SaveCase(explicitDate, Operations).Body).GetProperty("inwardDate").GetString());
     }
 
@@ -555,6 +698,7 @@ public sealed class ApiTests : IDisposable
         payload["entryType"] = "Resubmission";
         payload["status"] = "Resubmitted by CSE";
         payload["cseName"] = "Spoofed name";
+        payload["stage1ResubmissionDate"] = "2026-07-02";
         payload["owner"] = "CSE";
         var cseResponse = await cse.PostAsJsonAsync("/api/cases", payload);
         Assert.Equal(HttpStatusCode.Created, cseResponse.StatusCode);
@@ -568,8 +712,10 @@ public sealed class ApiTests : IDisposable
         Assert.Equal(HttpStatusCode.Forbidden, (await mofsl.PostAsJsonAsync("/api/cases", payload)).StatusCode);
         payload["status"] = "Submitted to MOFSL";
         payload["cseName"] = "CSE Demo";
+        payload["submittedDate"] = "2026-07-03";
         Assert.Equal(HttpStatusCode.Created, (await operations.PostAsJsonAsync("/api/cases", payload)).StatusCode);
         payload["status"] = "Query Raised by MOFSL";
+        payload["mofslQueryRaisedDate"] = "2026-07-06";
         payload["changedBy"] = "Spoofed actor";
         Assert.Equal(HttpStatusCode.Created, (await mofsl.PostAsJsonAsync("/api/cases", payload)).StatusCode);
         var history = await Read(await mofsl.GetAsync("/api/history"));
@@ -607,6 +753,7 @@ public sealed class ApiTests : IDisposable
         payload["referenceId"] = original.GetProperty("referenceId").GetString();
         payload["entryType"] = "Resubmission";
         payload["status"] = "Resubmitted by CSE";
+        payload["stage1ResubmissionDate"] = "2026-07-02";
         Assert.Equal(403, cases.SaveCase(payload, new User(3, "cse", "CSE Demo", "cse")).Status);
         Assert.Empty(Json(cases.GetCases(new User(3, "cse", "CSE Demo", "cse"))).EnumerateArray());
         Assert.Empty(Json(cases.GetCases(new User(4, "mofsl", "MOFSL Demo", "mofsl"))).EnumerateArray());
@@ -647,10 +794,11 @@ public sealed class ApiTests : IDisposable
         Assert.Equal(400, cases.SaveCase(Base("Digital Form Sent to Client"), Operations).Status);
         payload = Base("Physical Form Submitted to CSE");
         payload["autoCaptureDates"] = true;
-        Assert.Equal("", Json(cases.SaveCase(payload, Operations).Body).GetProperty("outwardDate").GetString());
+        Assert.Equal(400, cases.SaveCase(payload, Operations).Status);
         Assert.Equal(DateTime.Today.ToString("yyyy-MM-dd"), Json(cases.SaveCase(payload, Admin).Body).GetProperty("outwardDate").GetString());
         payload["outwardDate"] = "2026-07-02";
         Assert.Equal("2026-07-02", Json(cases.SaveCase(payload, Admin).Body).GetProperty("outwardDate").GetString());
+        Assert.Equal("2026-07-02", Json(cases.SaveCase(payload, Admin).Body).GetProperty("physicalFormSubmittedDate").GetString());
         payload = Base();
         payload["entryType"] = "Modification";
         Assert.Equal(400, cases.SaveCase(payload, Operations).Status);
@@ -662,10 +810,12 @@ public sealed class ApiTests : IDisposable
         Assert.Equal(1, WorkingDays(Date("2026-01-23"), Date("2026-01-27"), ["2026-01-26"]));
         var payload = Base("Query Raised to CSE - Missing Information");
         payload["queryDetails"] = "Missing proof";
+        payload["stage1QueryRaisedDate"] = "2026-07-01";
         var first = Json(cases.SaveCase(payload, Operations).Body);
         payload["referenceId"] = first.GetProperty("referenceId").GetString();
         payload["entryType"] = "Resubmission";
         payload["status"] = "Resubmitted by CSE";
+        payload["stage1ResubmissionDate"] = "2026-07-03";
         cases.SaveCase(payload, Operations);
         using (var db = database.Open())
         {
@@ -755,6 +905,14 @@ public sealed class ApiTests : IDisposable
             payload["queryDetails"] = "Workflow event";
             payload["accountNumber"] = "ACCOUNT-123";
             payload["accountOpeningDate"] = "2026-07-20";
+            if (ProcessDateFields.TryGetValue(statusName, out var processField))
+                payload[processField] = "2026-07-20";
+            if (statusName == "Signed Form Received from CSE")
+                payload["signedFormDate"] = "2026-07-20";
+            if (statusName == "Submitted to MOFSL")
+                payload["submittedDate"] = "2026-07-20";
+            if (statusName == "Form Found in Order - Ready for MOFSL Submission")
+                payload["stage4ReviewOutcome"] = "Found in Order";
             var (status, saved) = cases.SaveCase(payload, Operations);
             Assert.Equal(201, status);
             Assert.Equal(stage, Json(saved).GetProperty("statusStage").GetString());

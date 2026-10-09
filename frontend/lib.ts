@@ -10,7 +10,7 @@ export type Row = Record<
 >;
 export type Meta = {
   today?: string;
-  statuses: { status: string; stage: string }[];
+  statuses: { status: string; stage: string; requiredFields?: Record<string, string> }[];
   locations: string[];
   segments: string[];
   slaDays: number;
@@ -192,7 +192,7 @@ export function fieldValidationErrors(messages: string[]): {
     stage4ReviewOutcome: ['Stage 4 review outcome', 'A pending Stage 4 review'],
     stageOverride: ['Current stage override'],
     queryDetails: ['Query / event details'],
-    accountNumber: ['A closed case requires account number'],
+    accountNumber: ['Account number', 'A closed case requires account number'],
     accountOpeningDate: ['Account opening date', 'A closed case requires account number'],
     physicalFormSubmittedDate: ['Physical form submitted to CSE date', 'Physical submission date'],
     digitalFormSentDate: ['Digital form sent to client date', 'Digital submission date'],
@@ -259,7 +259,7 @@ export function defaults(user: User, meta: Meta): Record<string, string> {
 export function submissionPayload(form: Record<string, string>, user: User, current: Row | null) {
   const payload = { ...form };
   // Display the saved state; CSE response statuses take effect only when saving.
-  if (user.role === 'cse' && current && form.status === current.status) {
+  if (user.role === 'cse' && current) {
     if (current.status === 'Query Raised to CSE - Missing Information') {
       payload.entryType = 'Resubmission';
       payload.status = 'Resubmitted by CSE';
@@ -314,6 +314,24 @@ export function validate(
   }
   const autoField =
     payload.autoCaptureDates === 'true' ? automaticDateFields[payload.status] : undefined;
+  for (const [field, label] of Object.entries(
+    meta.statuses.find((item) => item.status === payload.status)?.requiredFields || {},
+  )) {
+    if (['accountNumber', 'accountOpeningDate', 'queryDetails'].includes(field)) continue;
+    const sendingDate = ['digitalFormSentDate', 'physicalFormSubmittedDate'].includes(field);
+    if (
+      !payload[field]?.trim() &&
+      !(sendingDate && payload.outwardDate?.trim()) &&
+      !(payload.autoCaptureDates === 'true' && dateFields.includes(field))
+    )
+      errors.push(`${label} is required for ${payload.status}`);
+  }
+  if (
+    payload.status === 'Form Found in Order - Ready for MOFSL Submission' &&
+    payload.stage4ReviewOutcome &&
+    payload.stage4ReviewOutcome !== 'Found in Order'
+  )
+    errors.push('Stage 4 review outcome must be Found in Order for readiness');
   if (
     payload.accountOpeningDate &&
     payload.inwardDate &&

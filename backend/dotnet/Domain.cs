@@ -83,10 +83,16 @@ public static class Domain
         foreach (var field in DateFields.Concat(EntryFields.Dates.Keys))
             if (DateOnly.TryParseExact(result.Text(field), "dd-MM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
                 result[field] = date.ToString("yyyy-MM-dd");
+        if (auto)
+            SynchronizeSendingDates(result);
         if (auto && AutoDates.TryGetValue(result.Text("status"), out var target) && result.Text(target) == "")
             result[target] = now[..10];
         if (auto && ProcessDateFields.TryGetValue(result.Text("status"), out var processField) && result.Text(processField) == "")
             result[processField] = now[..10];
+        if (auto && result.Text("status") == "Signed Form Received from CSE" && result.Text("signedFormDate") == "")
+            result["signedFormDate"] = result.Text("signedFormReceivedDate");
+        if (auto && result.Text("status") == "Submitted to MOFSL" && result.Text("submittedDate") == "")
+            result["submittedDate"] = result.Text("submittedToMofslDate");
         result.Remove("autoCaptureDates");
         if (result.Text("queryDetails") == "")
         {
@@ -96,6 +102,15 @@ public static class Domain
                 result["queryDetails"] = result.Text("mofslQueryType");
         }
         return result;
+    }
+
+    public static void SynchronizeSendingDates(Dictionary<string, object?> payload)
+    {
+        var field = payload.Text("channel") == "Digital" ? "digitalFormSentDate" : "physicalFormSubmittedDate";
+        if (payload.Text("outwardDate") == "")
+            payload["outwardDate"] = payload.Text(field);
+        if (payload.Text(field) == "")
+            payload[field] = payload.Text("outwardDate");
     }
 
     public static int WorkingDays(DateOnly? start, DateOnly? end, HashSet<string> holidays)

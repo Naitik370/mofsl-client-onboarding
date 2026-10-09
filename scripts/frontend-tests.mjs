@@ -82,6 +82,184 @@ const valid = {
   inwardDate: '2026-07-01',
 };
 
+const processStatuses = [
+  [
+    'Query Raised to CSE - Missing Information',
+    'Stage 1',
+    'stage1QueryRaisedDate',
+    'Stage 1 query raised date',
+  ],
+  ['Resubmitted by CSE', 'Stage 1', 'stage1ResubmissionDate', 'Stage 1 resubmission date'],
+  ['Application Form Under Preparation', 'Stage 2', 'formPreparedDate', 'Form prepared date'],
+  [
+    'Physical Form Submitted to CSE',
+    'Stage 2',
+    'physicalFormSubmittedDate',
+    'Physical form submitted to CSE date',
+  ],
+  [
+    'Digital Form Sent to Client',
+    'Stage 2',
+    'digitalFormSentDate',
+    'Digital form sent to client date',
+  ],
+  ['Signed Form Received from CSE', 'Stage 3', 'signedFormDate', 'Signed form received date'],
+  ['Discrepancy Raised to CSE', 'Stage 3', 'discrepancyRaisedDate', 'Discrepancy raised date'],
+  ['Form Returned to CSE', 'Stage 3', 'formReturnedToCseDate', 'Form returned to CSE date'],
+  [
+    'Discrepancy Resolution Received',
+    'Stage 4',
+    'discrepancyResolutionReceivedDate',
+    'Discrepancy resolution received date',
+  ],
+  [
+    'Resubmitted Form Received - Under Review',
+    'Stage 4',
+    'resubmittedFormReceivedDate',
+    'Resubmitted form received date',
+  ],
+  ['Submitted to MOFSL', 'Stage 5', 'submittedDate', 'Submitted to MOFSL date'],
+  ['Query Raised by MOFSL', 'Stage 5', 'mofslQueryRaisedDate', 'MOFSL query raised date'],
+  [
+    'Query Resolved - Resubmitted to MOFSL',
+    'Stage 5',
+    'mofslQueryResolvedDate',
+    'MOFSL query resolved date',
+  ],
+  ['Account Opened', 'Stage 6', 'accountOpeningDate', 'Account opening date'],
+  [
+    'Communication Sent - Case Closed',
+    'Stage 6',
+    'communicationSentDate',
+    'Communication sent date',
+  ],
+];
+const workflowMeta = {
+  ...meta,
+  statuses: [
+    ...meta.statuses.filter((item) => item.status === 'Request Received from CSE'),
+    ...processStatuses.map(([status, stage, field, label]) => ({
+      status,
+      stage,
+      requiredFields: {
+        [field]: label,
+        ...(['Account Opened', 'Communication Sent - Case Closed'].includes(status)
+          ? { accountNumber: 'Account number', accountOpeningDate: 'Account opening date' }
+          : {}),
+      },
+    })),
+    {
+      status: 'Form Found in Order - Ready for MOFSL Submission',
+      stage: 'Stage 4',
+      requiredFields: { stage4ReviewOutcome: 'Stage 4 review outcome' },
+    },
+  ],
+};
+
+test('API requirements mark and validate only the selected action fields', () => {
+  for (const [status, , field, label] of processStatuses) {
+    const payload = {
+      ...valid,
+      status,
+      channel: status === 'Digital Form Sent to Client' ? 'Digital' : 'Physical',
+      queryDetails: 'Missing proof',
+      accountNumber: 'TEST26100001',
+    };
+    if (status === 'Communication Sent - Case Closed') payload.accountOpeningDate = '2026-10-09';
+    assert(
+      validate(payload, workflowMeta, new Set()).some((message) =>
+        message.toLowerCase().includes(label.toLowerCase()),
+      ),
+      status,
+    );
+    assert.deepEqual(
+      validate({ ...payload, [field]: '2026-10-09' }, workflowMeta, new Set()),
+      [],
+      status,
+    );
+    const html = renderToStaticMarkup(
+      createElement(CaseEntry, {
+        user,
+        meta: workflowMeta,
+        cases: [],
+        selected: { ...payload, id: 1 },
+        onSaved: async () => {},
+        onClear: () => {},
+        onError: String,
+      }),
+    );
+    assert.match(html, new RegExp(`<input(?=[^>]*name="${field}")(?=[^>]*required="")`), status);
+    assert(html.includes(`${label} *`), status);
+    assert(!html.includes('name="outwardDate"'), status);
+  }
+  const payload = { ...valid, status: 'Form Found in Order - Ready for MOFSL Submission' };
+  assert(
+    validate(payload, workflowMeta, new Set()).some((message) =>
+      message.includes('Stage 4 review outcome is required'),
+    ),
+  );
+  assert(
+    validate({ ...payload, stage4ReviewOutcome: 'Still Pending' }, workflowMeta, new Set()).some(
+      (message) => message.includes('must be Found in Order'),
+    ),
+  );
+  assert.deepEqual(
+    validate({ ...payload, stage4ReviewOutcome: 'Found in Order' }, workflowMeta, new Set()),
+    [],
+  );
+});
+
+test('sending dates accept legacy outward dates and admin date capture', () => {
+  const payload = { ...valid, status: 'Digital Form Sent to Client', channel: 'Digital' };
+  assert.deepEqual(
+    validate({ ...payload, outwardDate: '2026-10-09' }, workflowMeta, new Set()),
+    [],
+  );
+  assert.deepEqual(validate({ ...payload, autoCaptureDates: 'true' }, workflowMeta, new Set()), []);
+  const [row] = parseCsv(
+    'Request ID,Client Name,PAN,Channel,Status\nREQ-CSV,Client,ABCDE1234F,Digital,Digital Form Sent to Client',
+    user,
+    workflowMeta,
+    new Set(),
+  );
+  assert(
+    row.errors.some((message) => message.includes('Digital form sent to client date is required')),
+  );
+});
+
+test('CSE response forms show and require the resolution date before saving', () => {
+  const cse = { ...user, role: 'cse', displayName: 'CSE Demo' };
+  for (const [status, field] of [
+    ['Query Raised to CSE - Missing Information', 'stage1ResubmissionDate'],
+    ['Discrepancy Raised to CSE', 'discrepancyResolutionReceivedDate'],
+    ['Form Returned to CSE', 'discrepancyResolutionReceivedDate'],
+  ]) {
+    const selected = { ...valid, id: 1, referenceId: 'REF-1', status };
+    const html = renderToStaticMarkup(
+      createElement(CaseEntry, {
+        user: cse,
+        meta: workflowMeta,
+        cases: [selected],
+        selected,
+        onSaved: async () => {},
+        onClear: () => {},
+        onError: String,
+      }),
+    );
+    assert.match(html, new RegExp(`<input(?=[^>]*name="${field}")(?=[^>]*required="")`));
+    const payload = submissionPayload({ ...selected }, cse, selected);
+    assert(
+      validate(payload, workflowMeta, new Set(['ref-1'])).some((message) =>
+        message.includes('is required for'),
+      ),
+    );
+    assert.deepEqual(
+      validate({ ...payload, [field]: '2026-10-09' }, workflowMeta, new Set(['ref-1'])),
+      [],
+    );
+  }
+});
+
 test('case details renders a labelled dialog with the case metrics and close control', () => {
   const html = renderToStaticMarkup(
     createElement(CaseDetails, {
@@ -186,7 +364,7 @@ test('CSE forms display the current status and apply query responses only on sub
     assert.equal(resolution.entryType, 'Discrepancy Resolution');
   }
   const manual = { ...response, status: 'Resubmitted Form Received - Under Review' };
-  assert.deepEqual(submissionPayload(manual, cse, queried), manual);
+  assert.equal(submissionPayload(manual, cse, queried).status, 'Resubmitted by CSE');
   assert.deepEqual(submissionPayload(response, user, queried), response);
 });
 

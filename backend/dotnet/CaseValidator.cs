@@ -6,6 +6,44 @@ namespace Onboarding;
 
 public static class CaseValidator
 {
+    public static Dictionary<string, string> RequiredFields(string status)
+    {
+        var fields = new Dictionary<string, string>();
+        if (ProcessDateFields.TryGetValue(status, out var processField))
+        {
+            var (field, label) = processField switch
+            {
+                "stage1QueryRaisedDate" => (processField, "Stage 1 query raised date"),
+                "stage1ResubmissionDate" => (processField, "Stage 1 resubmission date"),
+                "formPreparedDate" => (processField, "Form prepared date"),
+                "physicalFormSubmittedDate" => (processField, "Physical form submitted to CSE date"),
+                "digitalFormSentDate" => (processField, "Digital form sent to client date"),
+                "signedFormReceivedDate" => ("signedFormDate", "Signed form received date"),
+                "discrepancyRaisedDate" => (processField, "Discrepancy raised date"),
+                "formReturnedToCseDate" => (processField, "Form returned to CSE date"),
+                "discrepancyResolutionReceivedDate" => (processField, "Discrepancy resolution received date"),
+                "resubmittedFormReceivedDate" => (processField, "Resubmitted form received date"),
+                "submittedToMofslDate" => ("submittedDate", "Submitted to MOFSL date"),
+                "mofslQueryRaisedDate" => (processField, "MOFSL query raised date"),
+                "mofslQueryResolvedDate" => (processField, "MOFSL query resolved date"),
+                "accountOpeningDate" => (processField, "Account opening date"),
+                "communicationSentDate" => (processField, "Communication sent date"),
+                _ => throw new InvalidOperationException($"Unknown process date field: {processField}")
+            };
+            fields[field] = label;
+        }
+        if (status == "Form Found in Order - Ready for MOFSL Submission")
+            fields["stage4ReviewOutcome"] = "Stage 4 review outcome";
+        if (Closed.Contains(status))
+        {
+            fields["accountNumber"] = "Account number";
+            fields["accountOpeningDate"] = "Account opening date";
+        }
+        if (Statuses.Any(item => item.Name == status && item.Start is not null))
+            fields["queryDetails"] = "Query / event details";
+        return fields;
+    }
+
     public static List<string> Validate(Dictionary<string, object?> payload, SqliteConnection db, long? entryId)
     {
         var errors = new List<string>();
@@ -29,6 +67,11 @@ public static class CaseValidator
         var inward = Date(payload.Text("inwardDate"));
         var opened = Date(payload.Text("accountOpeningDate"));
         var status = payload.Text("status");
+        foreach (var (field, label) in RequiredFields(status))
+            if (payload.Text(field) == "" && field is not ("accountNumber" or "accountOpeningDate" or "queryDetails"))
+                errors.Add($"{label} is required for {status}");
+        if (status == "Form Found in Order - Ready for MOFSL Submission" && payload.Text("stage4ReviewOutcome") != "" && payload.Text("stage4ReviewOutcome") != "Found in Order")
+            errors.Add("Stage 4 review outcome must be Found in Order for readiness");
         var original = entryId is { } id
             ? Query(db, "SELECT MIN(e.inward_date) AS first FROM case_entries e WHERE e.case_id=(SELECT case_id FROM case_entries WHERE id=$0)", id).FirstOrDefault()
             : Query(db, "SELECT MIN(e.inward_date) AS first FROM case_entries e JOIN cases c ON c.id=e.case_id WHERE c.reference_id=$0 COLLATE NOCASE", payload.Text("referenceId")).FirstOrDefault();
