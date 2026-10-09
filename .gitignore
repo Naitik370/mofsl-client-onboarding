@@ -16,3 +16,9 @@ htmlcov/
 
 .DS_Store
 Thumbs.db
+**/bin/
+**/obj/
+TestResults/
+frontend/dist/assets/
+frontend/dist/index.html
+artifacts/

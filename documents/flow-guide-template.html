@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MOFSL · Code and user flow guide</title>
+    <style>
+      :root {
+        --ink: #142939;
+        --muted: #5b7080;
+        --blue: #1764ad;
+        --line: #dce5e8;
+        --paper: #f3f6f6;
+        --green: #157363;
+        --nav: 228px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family:
+          Segoe UI,
+          Arial,
+          sans-serif;
+        font-size: 15px;
+        line-height: 1.6;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button,
+      a,
+      input,
+      select {
+        touch-action: manipulation;
+      }
+      button {
+        cursor: pointer;
+      }
+      a {
+        color: var(--blue);
+      }
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 3px solid #309be9;
+        outline-offset: 4px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .rail {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: var(--nav);
+        padding: 30px 22px;
+        background: #142939;
+        color: #e9f1f5;
+        display: flex;
+        flex-direction: column;
+        z-index: 2;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .logo {
+        background: #cee7ec;
+        color: #142939;
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        border-radius: 11px;
+      }
+      .brand strong {
+        font-size: 16px;
+        display: block;
+      }
+      .brand small {
+        color: #a6becb;
+        font-size: 11px;
+        letter-spacing: 1.7px;
+      }
+      .rail-label {
+        margin: 36px 0 14px;
+        font-size: 11px;
+        letter-spacing: 2px;
+        color: #9ab3c3;
+      }
+      .chapters {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .chapters a {
+        padding: 9px 10px;
+        text-decoration: none;
+        color: #d3e1e8;
+        border-radius: 7px;
+        font-size: 13px;
+      }
+      .chapters a:hover {
+        background: #274252;
+      }
+      .rail-foot {
+        margin-top: auto;
+        color: #aac0cb;
+        font-size: 12px;
+        padding-top: 25px;
+        border-top: 1px solid #36505f;
+      }
+      .rail-foot strong {
+        color: #fff;
+      }
+      .rail-foot a {
+        color: #c5e5f4;
+      }
+      main {
+        margin-left: var(--nav);
+        padding: 44px clamp(24px, 4vw, 68px) 80px;
+        max-width: 1560px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 2.3px;
+        color: var(--green);
+        text-transform: uppercase;
+      }
+      .hero {
+        padding: 0 0 30px;
+        border-bottom: 1px solid var(--line);
+      }
+      .hero h1 {
+        font-size: clamp(30px, 3.8vw, 50px);
+        line-height: 1.12;
+        letter-spacing: -1.7px;
+        max-width: 800px;
+        margin: 15px 0 18px;
+        font-weight: 650;
+      }
+      .hero p {
+        color: var(--muted);
+        max-width: 730px;
+        margin: 0 0 20px;
+      }
+      .legend {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .legend b {
+        color: var(--ink);
+      }
+      .architecture {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-top: 30px;
+      }
+      .architecture button {
+        background: #fff;
+        border: 1px solid var(--line);
+        text-align: left;
+        border-radius: 10px;
+        padding: 15px;
+        color: var(--ink);
+      }
+      .architecture button:hover {
+        border-color: var(--blue);
+      }
+      .architecture span {
+        display: block;
+        font-size: 10px;
+        letter-spacing: 1.2px;
+        color: var(--blue);
+        text-transform: uppercase;
+      }
+      .architecture strong {
+        display: block;
+        font-size: 14px;
+        margin-top: 6px;
+      }
+      .architecture small {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .controls {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 18px 0;
+        background: var(--paper);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        border-bottom: 1px solid var(--line);
+      }
+      .search {
+        flex: 1;
+        min-width: 190px;
+      }
+      .search input {
+        width: 100%;
+        padding: 11px 14px;
+        border: 1px solid #cbd9df;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .controls label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .controls select {
+        padding: 10px;
+        border: 1px solid #cbd9df;
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        margin-left: 6px;
+      }
+      .filters {
+        display: flex;
+        gap: 6px;
+      }
+      .filters button {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 8px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .filters button[aria-pressed='true'] {
+        background: #142939;
+        color: #fff;
+        border-color: #142939;
+      }
+      .count {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 16px 0;
+      }
+      .section {
+        padding-top: 25px;
+        scroll-margin-top: 118px;
+      }
+      .section-heading {
+        display: flex;
+        gap: 18px;
+        align-items: baseline;
+        margin-bottom: 18px;
+      }
+      .section-index {
+        font-family: Consolas, monospace;
+        color: #92a6b2;
+        font-size: 14px;
+      }
+      .section h2 {
+        font-size: 24px;
+        letter-spacing: -0.7px;
+        line-height: 1.2;
+        margin: 0;
+      }
+      .section-heading p {
+        font-size: 13px;
+        color: var(--muted);
+        margin: 6px 0 0;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .flow-card {
+        position: relative;
+        display: block;
+        text-align: left;
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: #fff;
+        color: var(--ink);
+        padding: 22px;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s;
+      }
+      .flow-card:hover {
+        border-color: #83aecf;
+        box-shadow: 0 4px 16px #173b5310;
+      }
+      .flow-card[aria-expanded='true'] {
+        border-color: var(--blue);
+        box-shadow: inset 3px 0 var(--blue);
+      }
+      .card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.6px;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+      .card-number {
+        font-family: Consolas, monospace;
+        color: var(--blue);
+        font-size: 12px;
+      }
+      .flow-card h3 {
+        font-size: 17px;
+        line-height: 1.35;
+        margin: 13px 0 10px;
+        font-weight: 650;
+      }
+      .flow-card p {
+        font-size: 13px;
+        line-height: 1.65;
+        margin: 0 0 20px;
+        color: var(--muted);
+      }
+      .card-bottom {
+        border-top: 1px solid #eef2f4;
+        padding-top: 12px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 11px;
+      }
+      .card-bottom span:first-child {
+        color: #56758c;
+      }
+      .card-bottom span:last-child {
+        color: var(--blue);
+        font-weight: 650;
+      }
+      .no-results {
+        padding: 40px;
+        background: #fff;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        color: var(--muted);
+      }
+      .page-foot {
+        margin-top: 45px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .detail-panel {
+        position: fixed;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: min(620px, 57vw);
+        background: #fff;
+        z-index: 5;
+        box-shadow: -12px 0 40px #102d3929;
+        border-left: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+      }
+      .panel-header {
+        padding: 23px 28px 20px;
+        background: #f9fbfb;
+        border-bottom: 1px solid var(--line);
+      }
+      .panel-header-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+      .panel-header-top small {
+        font-size: 10px;
+        letter-spacing: 1.5px;
+        color: var(--blue);
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .close {
+        border: 1px solid #cddade;
+        border-radius: 7px;
+        background: #fff;
+        padding: 6px 12px;
+        font-size: 12px;
+        color: var(--ink);
+      }
+      .panel-header h2 {
+        font-size: 23px;
+        line-height: 1.25;
+        letter-spacing: -0.6px;
+        margin: 15px 0 9px;
+      }
+      .panel-header p {
+        font-size: 13px;
+        color: var(--muted);
+        margin: 0;
+      }
+      .panel-body {
+        padding: 0 28px 25px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        flex: 1;
+      }
+      .detail-section {
+        padding-top: 24px;
+      }
+      .detail-section h3 {
+        font-size: 11px;
+        letter-spacing: 1.7px;
+        text-transform: uppercase;
+        color: var(--green);
+        margin: 0 0 12px;
+      }
+      .steps {
+        margin: 0;
+        padding-left: 21px;
+        font-size: 13px;
+        color: #344e5f;
+      }
+      .steps li {
+        padding: 0 0 9px 6px;
+      }
+      .data-box,
+      .note {
+        padding: 13px 15px;
+        font-size: 12px;
+        line-height: 1.7;
+        border-radius: 8px;
+        border: 1px solid #dce8e9;
+        background: #f2f7f7;
+      }
+      .data-box strong,
+      .note strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #316858;
+      }
+      .note {
+        background: #fff8e9;
+        border-color: #eddfbe;
+        color: #5b5036;
+      }
+      .note strong {
+        color: #826b34;
+      }
+      .sources {
+        margin-top: 26px;
+      }
+      .source-tabs {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .source-tabs button {
+        border: 1px solid #cfdee6;
+        border-radius: 7px;
+        background: #fff;
+        padding: 7px 9px;
+        font-size: 11px;
+        color: #415e72;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+      .source-tabs button[aria-pressed='true'] {
+        background: #e6f1fa;
+        border-color: #80abd0;
+        color: #17558b;
+      }
+      .code-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        font-size: 11px;
+        color: var(--muted);
+        margin: 10px 0;
+      }
+      .code-path {
+        overflow-wrap: anywhere;
+        font-weight: 600;
+        color: #315b7a;
+      }
+      .copy {
+        flex-shrink: 0;
+        border: 1px solid #cddade;
+        background: #fff;
+        border-radius: 6px;
+        font-size: 11px;
+        padding: 6px 9px;
+        color: #415e72;
+      }
+      .code {
+        background: #122635;
+        color: #e2ecf1;
+        border-radius: 9px;
+        overflow: auto;
+        font-family:
+          Consolas,
+          Courier New,
+          monospace;
+        font-size: 11px;
+        line-height: 1.8;
+        padding: 15px 0;
+        margin: 0;
+        tab-size: 2;
+      }
+      .code .line {
+        display: block;
+        padding-right: 20px;
+        white-space: pre;
+        min-height: 1.8em;
+      }
+      .code .line:before {
+        content: attr(data-line);
+        display: inline-block;
+        min-width: 46px;
+        text-align: right;
+        padding: 0 12px 0 7px;
+        margin-right: 12px;
+        color: #7491a4;
+        border-right: 1px solid #284758;
+        user-select: none;
+      }
+      .source-hash {
+        font-size: 10px;
+        color: #6c8594;
+        margin-top: 8px;
+      }
+      .panel-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid var(--line);
+        background: #fafcfc;
+        padding: 12px 28px;
+      }
+      .panel-nav button {
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #fff;
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--ink);
+      }
+      .panel-nav span {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      @media (min-width: 1650px) {
+        body.drawer-open main {
+          margin-right: 620px;
+        }
+        .cards {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 1100px) {
+        :root {
+          --nav: 190px;
+        }
+        .rail {
+          padding: 26px 16px;
+        }
+        main {
+          padding: 35px 25px 65px;
+        }
+        .architecture {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .cards {
+          grid-template-columns: 1fr;
+        }
+        .controls {
+          gap: 10px;
+        }
+        .detail-panel {
+          width: min(620px, 68vw);
+        }
+      }
+      @media (max-width: 700px) {
+        .rail {
+          position: static;
+          width: auto;
+          padding: 18px 20px;
+          display: block;
+        }
+        .rail-label,
+        .chapters,
+        .rail-foot {
+          display: none;
+        }
+        .brand small {
+          font-size: 10px;
+        }
+        main {
+          margin-left: 0;
+          padding: 28px 18px 45px;
+        }
+        .hero h1 {
+          font-size: 34px;
+        }
+        .architecture {
+          gap: 7px;
+        }
+        .architecture button {
+          padding: 12px;
+        }
+        .controls {
+          position: static;
+        }
+        .filters {
+          width: 100%;
+        }
+        .controls label {
+          flex: 1;
+        }
+        .detail-panel {
+          width: 100%;
+          border-left: 0;
+        }
+        .panel-header {
+          padding: 20px;
+        }
+        .panel-body {
+          padding: 0 20px 22px;
+        }
+        .panel-header h2 {
+          font-size: 22px;
+        }
+        .panel-nav {
+          padding: 12px 20px;
+        }
+        .flow-card {
+          padding: 20px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+          transition: none !important;
+        }
+      }
+      @media print {
+        .rail,
+        .controls,
+        .detail-panel,
+        .architecture,
+        .card-bottom {
+          display: none !important;
+        }
+        main {
+          margin: 0;
+          padding: 0;
+        }
+        .cards {
+          grid-template-columns: 1fr;
+        }
+        .flow-card {
+          break-inside: avoid;
+        }
+        .hero h1 {
+          font-size: 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside class="rail" aria-label="Guide chapters">
+      <div class="brand">
+        <div class="logo">CO</div>
+        <div><strong>MOFSL</strong></div>
+      </div>
+      <div class="rail-label">READING PATH</div>
+      <nav class="chapters" id="chapter-nav"></nav>
+      <div class="rail-foot">
+        <span id="rail-count"></span>
+      </div>
+    </aside>
+    <main id="main-content">
+      <header class="hero">
+        <h1>From a request to<br />an opened account.</h1>
+        <p>Select a segment to see user steps and the code behind them.</p>
+        <div class="architecture" aria-label="Application architecture">
+          <button data-topic="architecture">
+            <strong>React + TypeScript</strong>
+          </button>
+          <button data-topic="request">
+            <strong>ASP.NET Core API</strong>
+          </button>
+          <button data-topic="solid-srp">
+            <strong>Focused C# services</strong>
+          </button>
+          <button data-topic="records">
+            <strong>Normalized SQLite</strong>
+          </button>
+        </div>
+      </header>
+      <div class="controls">
+        <label class="search"
+          ><span class="sr-only">Search guide segments</span
+          ><input id="search" type="search" placeholder="Search a stage, action, or code file..."
+        /></label>
+        <label
+          >Role<select id="role">
+            <option value="all">All roles</option>
+            <option value="admin">Admin</option>
+            <option value="operations">Operations</option>
+            <option value="cse">CSE</option>
+            <option value="mofsl">MOFSL</option>
+            <option value="viewer">Viewer</option>
+          </select></label
+        >
+        <div class="filters" role="group" aria-label="Guide perspective">
+          <button data-kind="all" aria-pressed="true">All segments</button
+          ><button data-kind="journey" aria-pressed="false">User journey</button
+          ><button data-kind="code" aria-pressed="false">Inside the code</button
+          ><button data-kind="design" aria-pressed="false">SOLID & checks</button>
+        </div>
+      </div>
+      <p class="count" id="result-count" role="status"></p>
+      <div id="sections"></div>
+      <p class="no-results" id="no-results" hidden>
+        No matching segments. Try another search, role, or perspective.
+      </p>
+      <footer class="page-foot">
+        This standalone guide works offline. Code excerpts are captured from the working tree. Run
+        <code>npm run guide</code> after source changes; <code>npm run build</code> also refreshes
+        the guide. This guide describes the React/.NET application.
+      </footer>
+    </main>
+    <aside class="detail-panel" id="detail-panel" aria-labelledby="detail-title" hidden>
+      <header class="panel-header">
+        <div class="panel-header-top">
+          <small id="detail-chapter"></small
+          ><button class="close" id="close-panel" aria-label="Close flow sidebar">Close ✕</button>
+        </div>
+        <h2 id="detail-title"></h2>
+      </header>
+      <div class="panel-body" id="panel-body">
+        <section class="detail-section">
+          <h3>What the user does</h3>
+          <ol class="steps" id="user-steps"></ol>
+        </section>
+        <section class="detail-section">
+          <h3>How the code handles it</h3>
+          <ol class="steps" id="system-steps"></ol>
+        </section>
+        <section class="detail-section">
+          <div class="data-box">
+            <strong>Data and request flow</strong><span id="detail-data"></span>
+          </div>
+        </section>
+        <section class="detail-section">
+          <div class="note">
+            <strong>Actual behavior to remember</strong><span id="detail-note"></span>
+          </div>
+        </section>
+        <section class="detail-section sources">
+          <h3>The code behind this segment</h3>
+          <div class="source-tabs" id="source-tabs" role="group" aria-label="Source excerpts"></div>
+          <div class="code-meta">
+            <span class="code-path" id="code-path"></span
+            ><button class="copy" id="copy-code">Copy code</button>
+          </div>
+          <pre class="code"><code id="source-code"></code></pre>
+          <div class="source-hash" id="source-hash"></div>
+        </section>
+      </div>
+      <footer class="panel-nav">
+        <button id="previous-topic">← Previous</button><span id="panel-position"></span
+        ><button id="next-topic">Next →</button>
+      </footer>
+    </aside>
+    <span id="copy-status" class="sr-only" role="status"></span>
+    <noscript
+      ><p style="padding: 30px">
+        Enable JavaScript to open guide segments and their code sidebars. The guide needs no network
+        connection.
+      </p></noscript
+    >
+    <!-- GUIDE_DATA -->
+    <script>
+      const { chapters, topics } = JSON.parse(document.getElementById('guide-data').textContent);
+      const byId = new Map(topics.map((topic) => [topic.id, topic]));
+      const chapterMap = new Map(chapters.map((chapter) => [chapter.id, chapter]));
+      const $ = (id) => document.getElementById(id);
+      const panel = $('detail-panel');
+      let activeTopic = null,
+        activeSource = null,
+        lastTrigger = null,
+        kind = 'all',
+        visibleTopics = topics;
+
+      function element(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+      function renderCards() {
+        const query = $('search').value.trim().toLowerCase();
+        const role = $('role').value;
+        visibleTopics = topics.filter((topic) => {
+          const chapter = chapterMap.get(topic.chapter);
+          const haystack = [
+            topic.title,
+            topic.summary,
+            topic.note,
+            ...topic.user,
+            ...topic.system,
+            ...topic.sources.map((source) => source.file),
+          ]
+            .join(' ')
+            .toLowerCase();
+          return (
+            (!query || haystack.includes(query)) &&
+            (role === 'all' || topic.roles.includes(role)) &&
+            (kind === 'all' || chapter.kind === kind)
+          );
+        });
+        $('sections').replaceChildren();
+        $('chapter-nav').replaceChildren();
+        chapters.forEach((chapter, index) => {
+          const entries = visibleTopics.filter((topic) => topic.chapter === chapter.id);
+          if (!entries.length) return;
+          const section = element('section', 'section');
+          section.id = chapter.id;
+          const heading = element('div', 'section-heading');
+          heading.append(element('span', 'section-index', String(index + 1).padStart(2, '0')));
+          const headingText = element('div');
+          headingText.append(element('h2', '', chapter.title));
+          heading.append(headingText);
+          section.append(heading);
+          const cards = element('div', 'cards');
+          entries.forEach((topic) => {
+            const button = element('button', 'flow-card');
+            button.type = 'button';
+            button.dataset.topic = topic.id;
+            button.setAttribute('aria-controls', 'detail-panel');
+            button.setAttribute('aria-expanded', String(topic.id === activeTopic?.id));
+            const top = element('div', 'card-top');
+            top.append(
+              element('span', 'card-number', String(topic.number).padStart(2, '0')),
+              element(
+                'span',
+                '',
+                chapter.kind === 'design'
+                  ? 'Design decision'
+                  : chapter.kind === 'code'
+                    ? 'Implementation'
+                    : 'User journey',
+              ),
+            );
+            const bottom = element('div', 'card-bottom');
+            bottom.append(
+              element(
+                'span',
+                '',
+                `${topic.sources.length} source ${topic.sources.length === 1 ? 'excerpt' : 'excerpts'}`,
+              ),
+              element('span', '', 'Explore flow + code →'),
+            );
+            button.append(top, element('h3', '', topic.title), bottom);
+            cards.append(button);
+          });
+          section.append(cards);
+          $('sections').append(section);
+          const link = element('a', '', `${String(index + 1).padStart(2, '0')}  ${chapter.title}`);
+          link.href = '#' + chapter.id;
+          link.addEventListener('click', (event) => {
+            event.preventDefault();
+            closePanel();
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+          $('chapter-nav').append(link);
+        });
+        $('result-count').textContent = `${visibleTopics.length} of ${topics.length} segments`;
+        $('rail-count').textContent = `${topics.length} segments · ${chapters.length} chapters`;
+        $('no-results').hidden = visibleTopics.length !== 0;
+        updatePosition();
+      }
+      function fillSteps(id, values) {
+        $(id).replaceChildren(...values.map((value) => element('li', '', value)));
+      }
+      function showSource(index) {
+        activeSource = activeTopic.sources[index];
+        document
+          .querySelectorAll('#source-tabs button')
+          .forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
+        $('code-path').textContent =
+          `${activeSource.file} · lines ${activeSource.firstLine}–${activeSource.lastLine}`;
+        $('source-code').replaceChildren(
+          ...activeSource.code.split('\n').map((line, offset) => {
+            const span = element('span', 'line', line || ' ');
+            span.dataset.line = activeSource.firstLine + offset;
+            return span;
+          }),
+        );
+        $('source-hash').textContent =
+          `Exact source excerpt · SHA-256 ${activeSource.hash} · Refresh with npm run guide`;
+        $('copy-code').textContent = 'Copy code';
+      }
+      function openTopic(id, trigger) {
+        const topic = byId.get(id);
+        if (!topic) return;
+        const wasClosed = panel.hidden;
+        if (trigger) lastTrigger = trigger;
+        activeTopic = topic;
+        $('detail-title').textContent = topic.title;
+        $('detail-chapter').textContent =
+          `${chapterMap.get(topic.chapter).title} · Segment ${topic.number}`;
+        fillSteps('user-steps', topic.user);
+        fillSteps('system-steps', topic.system);
+        $('detail-data').textContent = topic.data;
+        $('detail-note').textContent = topic.note;
+        $('source-tabs').replaceChildren(
+          ...topic.sources.map((source, index) => {
+            const button = element(
+              'button',
+              '',
+              `${source.file.split('/').pop()} · ${source.firstLine}`,
+            );
+            button.type = 'button';
+            button.title = `${source.file}: ${source.marker}`;
+            button.addEventListener('click', () => showSource(index));
+            return button;
+          }),
+        );
+        showSource(0);
+        panel.hidden = false;
+        document.body.classList.add('drawer-open');
+        $('panel-body').scrollTop = 0;
+        document
+          .querySelectorAll('[data-topic]')
+          .forEach((button) =>
+            button.setAttribute('aria-expanded', String(button.dataset.topic === id)),
+          );
+        history.replaceState(null, '', '#flow-' + id);
+        updatePosition();
+        if (wasClosed) $('close-panel').focus({ preventScroll: true });
+      }
+      function closePanel() {
+        if (panel.hidden) return;
+        panel.hidden = true;
+        activeTopic = null;
+        activeSource = null;
+        document.body.classList.remove('drawer-open');
+        document
+          .querySelectorAll('[data-topic]')
+          .forEach((button) => button.setAttribute('aria-expanded', 'false'));
+        history.replaceState(null, '', location.pathname + location.search);
+        if (lastTrigger?.isConnected) lastTrigger.focus({ preventScroll: true });
+      }
+      function navigationList() {
+        return visibleTopics.includes(activeTopic) ? visibleTopics : topics;
+      }
+      function updatePosition() {
+        if (!activeTopic) return;
+        const list = navigationList(),
+          index = list.indexOf(activeTopic);
+        $('panel-position').textContent = `${index + 1} / ${list.length} segments`;
+        $('previous-topic').disabled = index === 0;
+        $('next-topic').disabled = index === list.length - 1;
+      }
+      function moveTopic(offset) {
+        const list = navigationList(),
+          next = list[list.indexOf(activeTopic) + offset];
+        if (next) openTopic(next.id);
+      }
+      document.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-topic]');
+        if (trigger) openTopic(trigger.dataset.topic, trigger);
+        const filter = event.target.closest('[data-kind]');
+        if (filter) {
+          kind = filter.dataset.kind;
+          document
+            .querySelectorAll('[data-kind]')
+            .forEach((button) => button.setAttribute('aria-pressed', String(button === filter)));
+          renderCards();
+        }
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !panel.hidden) {
+          event.preventDefault();
+          closePanel();
+        }
+      });
+      $('close-panel').addEventListener('click', closePanel);
+      $('previous-topic').addEventListener('click', () => moveTopic(-1));
+      $('next-topic').addEventListener('click', () => moveTopic(1));
+      $('search').addEventListener('input', renderCards);
+      $('role').addEventListener('change', renderCards);
+      $('copy-code').addEventListener('click', async () => {
+        if (!activeSource) return;
+        try {
+          if (navigator.clipboard && window.isSecureContext)
+            await navigator.clipboard.writeText(activeSource.code);
+          else {
+            const field = element('textarea');
+            field.value = activeSource.code;
+            field.style.position = 'fixed';
+            field.style.opacity = '0';
+            document.body.append(field);
+            field.select();
+            const copied = document.execCommand('copy');
+            field.remove();
+            if (!copied) throw new Error('Copy unavailable');
+          }
+          $('copy-code').textContent = 'Copied';
+          $('copy-status').textContent = 'Code copied to clipboard.';
+        } catch {
+          $('copy-status').textContent = 'Copy unavailable. Select the code manually.';
+          $('copy-code').textContent = 'Select code';
+        }
+      });
+      renderCards();
+      function restoreTopicFromHash() {
+        const id = location.hash.replace(/^#flow-/, '');
+        if (byId.has(id)) openTopic(id);
+        else closePanel();
+      }
+      window.addEventListener('hashchange', restoreTopicFromHash);
+      restoreTopicFromHash();
+    </script>
+  </body>
+</html>

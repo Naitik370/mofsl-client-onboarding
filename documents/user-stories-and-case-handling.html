@@ -154,7 +154,7 @@
   </section>
 
   <section id="edge-cases"><h2>Edge-case handling</h2><div class="grid">
-    <article class="scenario"><span class="label query">Generated Reference ID</span><h3>A New case does not yet have a Reference ID</h3><p>Leave the field unchanged and save the New entry. The API generates the Reference ID automatically. Copy or select that generated ID whenever recording a Resubmission, Discrepancy Resolution, or Modification.</p></article>
+    <article class="scenario"><span class="label query">Generated Reference ID</span><h3>A New case does not yet have a Reference ID</h3><p>Leave the field unchanged and save the New entry. The Reference ID is generated automatically. Copy or select that generated ID whenever recording a Resubmission, Discrepancy Resolution, or Modification.</p></article>
     <article class="scenario"><span class="label query">Unknown Reference ID</span><h3>A resubmission arrives before the original case exists</h3><p>First create the original case as New using its first inward date. Then add the resubmission under the same Reference ID.</p></article>
     <article class="scenario"><span class="label query">Repeated Query</span><h3>The first response is still incomplete</h3><p>Complete the first response review, then raise a fresh query with updated details. Do not overwrite the earlier query; the history should show both rounds.</p></article>
     <article class="scenario"><span class="label query">Two Open Queries</span><h3>More than one issue is pending</h3><p>Record each query separately and resolve them in the order their responses are received. Keep details specific enough to identify which issue is being closed.</p></article>
@@ -189,7 +189,7 @@
     <article class="scenario"><span class="label query">MOFSL query case</span><h3>External query resolved</h3><div class="route">Submitted to MOFSL <span>→</span> Query Raised by MOFSL <span>→</span> Resolved and Resubmitted <span>→</span> Account Opened <span>→</span> Closed</div><p>The case is NRFT and the query waiting period is excluded from net turnaround time.</p></article>
   </div></section>
 
-  <div class="callout warning"><strong>Operating discipline:</strong> Let the API generate the Reference ID for a New case, keep that same ID for the entire client journey, use the status that describes what actually happened, add clear details for every query or exception, and never reset the inward date when a case is resubmitted.</div>
+  <div class="callout warning"><strong>Operating discipline:</strong> Use the generated Reference ID for a New case, keep that same ID for the entire client journey, use the status that describes what actually happened, add clear details for every query or exception, and never reset the inward date when a case is resubmitted.</div>
 </main>
 <footer>MOFSL Client Onboarding — business workflow and exception-handling guide</footer>
 </body>

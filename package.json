@@ -3,12 +3,25 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "build": "tsc",
-    "check": "tsc --noEmit",
-    "start": "python backend/server.py",
-    "test": "python -m unittest discover -s backend -p \"test_*.py\" -v"
+    "build": "npm run guide && vite build && node scripts/dotnet.mjs build backend/dotnet/Onboarding.Api.csproj",
+    "check": "tsc --noEmit && node scripts/dotnet.mjs build backend/dotnet/Onboarding.Api.csproj",
+    "start": "node scripts/dotnet.mjs run --project backend/dotnet/Onboarding.Api.csproj --no-launch-profile -- --urls http://127.0.0.1:4173",
+    "dev": "vite --host 127.0.0.1",
+    "test": "node scripts/frontend-tests.mjs && node scripts/dotnet.mjs test backend/tests/Onboarding.Tests.csproj",
+    "guide": "node scripts/build-flow-guide.mjs",
+    "guide:check": "node scripts/build-flow-guide.mjs --check",
+    "format": "prettier --write \"frontend/*.ts\" \"frontend/*.tsx\" \"frontend/components/*.tsx\" \"scripts/*.mjs\" vite.config.ts && node scripts/dotnet.mjs format Onboarding.sln whitespace",
+    "format:check": "prettier --check \"frontend/*.ts\" \"frontend/*.tsx\" \"frontend/components/*.tsx\" \"scripts/*.mjs\" vite.config.ts && node scripts/dotnet.mjs format Onboarding.sln whitespace --verify-no-changes"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "prettier": "^3.9.9",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.0"
   }
 }
