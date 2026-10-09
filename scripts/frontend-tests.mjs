@@ -397,6 +397,7 @@ test('CSE response forms show and require the resolution date before saving', ()
       }),
     );
     assert.match(html, new RegExp(`<input(?=[^>]*name="${field}")(?=[^>]*required="")`));
+    assert(html.includes('name="resubmissionDate"'));
     const payload = submissionPayload({ ...selected }, cse, selected);
     assert(
       validate(payload, workflowMeta, new Set(['ref-1'])).some((message) =>
@@ -408,6 +409,63 @@ test('CSE response forms show and require the resolution date before saving', ()
       [],
     );
   }
+});
+
+test('edit forms hide empty dates unrelated to the selected action', () => {
+  const selected = {
+    ...valid,
+    id: 1,
+    referenceId: 'REF-1',
+    channel: 'Digital',
+    status: 'Digital Form Sent to Client',
+    formPreparedDate: '2026-07-02',
+  };
+  const html = renderToStaticMarkup(
+    createElement(CaseEntry, {
+      user,
+      meta: workflowMeta,
+      cases: [selected],
+      selected,
+      onSaved: async () => {},
+      onClear: () => {},
+      onError: String,
+    }),
+  );
+  assert.match(
+    html,
+    /<input(?=[^>]*name="formPreparedDate")(?=[^>]*value="2026-07-02")(?=[^>]*readOnly="")/,
+  );
+  assert.match(html, /<input(?=[^>]*name="digitalFormSentDate")(?=[^>]*required="")/);
+  assert(!/<input(?=[^>]*name="digitalFormSentDate")(?=[^>]*readOnly="")/.test(html));
+  assert.match(html, /<input(?=[^>]*name="inwardDate")(?=[^>]*readOnly="")/);
+  for (const field of [
+    'physicalFormSubmittedDate',
+    'stage1QueryRaisedDate',
+    'mofslQueryRaisedDate',
+  ])
+    assert(!html.includes(`name="${field}"`));
+  assert(html.includes('Empty dates appear only for the selected action'));
+});
+
+test('attention rows have direct edit actions only when writing is available', () => {
+  const report = {
+    summary: { rejected: 0, cancelled: 0 },
+    pipeline: [],
+    cases: [
+      { caseId: 1, referenceId: 'REF-ATTENTION', clientName: 'Waiting Client', status: 'On Hold' },
+    ],
+  };
+  for (const editLabel of ['Edit', 'Add update']) {
+    const html = renderToStaticMarkup(
+      createElement(Dashboard, { report, meta, onEdit: () => {}, editLabel }),
+    );
+    assert(html.includes('<th>Actions</th><th>Reference</th>'));
+    assert.match(html, new RegExp(`<button class="text-btn">${editLabel}</button>`));
+    assert(html.includes('REF-ATTENTION'));
+  }
+  const readonly = renderToStaticMarkup(createElement(Dashboard, { report, meta }));
+  assert(!readonly.includes('<th>Actions</th>'));
+  assert(!readonly.includes('<button'));
 });
 
 test('case details renders a labelled dialog with the case metrics and close control', () => {
@@ -572,7 +630,7 @@ test('new Stage 1 form does not display later-stage dates', () => {
     }),
   );
   assert(html.includes('name="inwardDate"'));
-  assert(html.includes('name="stage1QueryRaisedDate"'));
+  assert(!html.includes('name="stage1QueryRaisedDate"'));
   assert(!html.includes('name="formPreparedDate"'));
   assert(!html.includes('name="accountOpeningDate"'));
   for (const field of [
@@ -675,7 +733,7 @@ test('field errors associate frontend and API validation messages with controls'
   assert.deepEqual(result.general, ['CSE users can only update their own cases']);
 });
 
-test('entry form shows dates for each master stage and the selected channel', () => {
+test('entry form shows recorded dates for each master stage and the selected channel', () => {
   const stages = [
     ['Stage 1', 'stage1ResubmissionDate'],
     ['Stage 2', 'formPreparedDate'],
@@ -697,6 +755,10 @@ test('entry form shows dates for each master stage and the selected channel', ()
             status: 'Selected status',
             channel,
             formPreparedDate: '2026-07-02',
+            [expected]: '2026-07-02',
+            physicalFormSubmittedDate: channel === 'Physical' ? '2026-07-02' : '',
+            digitalFormSentDate: channel === 'Digital' ? '2026-07-02' : '',
+            formReturnedToCseDate: channel === 'Physical' ? '2026-07-02' : '',
           },
           onSaved: async () => {},
           onClear: () => {},

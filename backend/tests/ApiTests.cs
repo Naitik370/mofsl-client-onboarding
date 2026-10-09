@@ -21,6 +21,69 @@ public sealed class ApiTests : IDisposable
     }
 
     [Fact]
+    public void RecordedDatesRejectChangesAndClearsWithoutChangingTouchesOrAudit()
+    {
+        foreach (var field in DateFields.Concat(EntryFields.Dates.Keys).Where(field => field != "statusDate"))
+        {
+            var payload = Base();
+            payload["autoStatus"] = false;
+            payload["channel"] = field == "digitalFormSentDate" ? "Digital" : "Physical";
+            payload[field] = "2026-07-02";
+            var created = cases.SaveCase(payload, Operations);
+            Assert.Equal(201, created.Status);
+            var original = Json(created.Body);
+            var id = original.GetProperty("id").GetInt64();
+            var historyCount = Json(cases.GetHistory(Operations)).GetArrayLength();
+            foreach (var value in new[] { "2026-07-03", "" })
+            {
+                payload[field] = value;
+                var rejected = cases.SaveCase(payload, Admin, id);
+                Assert.Equal(400, rejected.Status);
+                Assert.Contains(field, Json(rejected.Body).GetProperty("errors")[0].GetString());
+                var unchanged = Json(cases.GetCases(Operations)).EnumerateArray().Single(row => row.GetProperty("id").GetInt64() == id);
+                Assert.Equal("2026-07-02", unchanged.GetProperty(field).GetString());
+                Assert.Equal(1, unchanged.GetProperty("touchCount").GetInt32());
+                Assert.Equal(historyCount, Json(cases.GetHistory(Operations)).GetArrayLength());
+            }
+            payload.Remove(field);
+            var preserved = cases.SaveCase(payload, Operations, id);
+            Assert.Equal(200, preserved.Status);
+            Assert.Equal("2026-07-02", Json(preserved.Body).GetProperty(field).GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData("cse", "Query Raised to CSE - Missing Information", "Resubmitted by CSE", "stage1ResubmissionDate")]
+    [InlineData("mofsl", "Submitted to MOFSL", "Account Opened", "accountOpeningDate")]
+    public async Task RelatedUpdatesCannotChangeSavedDatesButCanSupplyNewActionDates(string role, string status, string nextStatus, string field)
+    {
+        using var client = Client();
+        await Login(client, "operations", "OpsDemo@123");
+        var payload = Base(status);
+        payload["queryDetails"] = "Missing proof";
+        payload["stage1QueryRaisedDate"] = "2026-07-02";
+        payload["submittedDate"] = "2026-07-02";
+        payload["autoStatus"] = false;
+        var created = await Read(await client.PostAsJsonAsync("/api/cases", payload));
+        payload["referenceId"] = created.GetProperty("referenceId").GetString();
+        payload["entryType"] = role == "cse" ? "Resubmission" : "Modification";
+        payload["status"] = nextStatus;
+        payload[field] = "2026-07-03";
+        payload["accountNumber"] = "TEST-LOCKED-DATES";
+        await Login(client, role, role == "cse" ? "CseDemo@123" : "MofslDemo@123");
+        payload["inwardDate"] = "2026-07-03";
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/cases", payload)).StatusCode);
+        payload["inwardDate"] = "2026-07-01";
+        var result = await client.PostAsJsonAsync("/api/cases", payload);
+        Assert.Equal(HttpStatusCode.Created, result.StatusCode);
+        var saved = await Read(result);
+        Assert.Equal("2026-07-01", saved.GetProperty("inwardDate").GetString());
+        Assert.Equal("2026-07-03", saved.GetProperty(field).GetString());
+        Assert.Equal(2, saved.GetProperty("touchCount").GetInt32());
+        Assert.Equal(2, (await Read(await client.GetAsync("/api/history"))).GetArrayLength());
+    }
+
+    [Fact]
     public void MissingBusinessDatesUseTheProcessDateOrServerDateAndPreserveExplicitAndExistingDates()
     {
         var service = new CaseService(database, new FixedClock(new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero)));
@@ -48,6 +111,8 @@ public sealed class ApiTests : IDisposable
         saved = Json(later.SaveCase(payload, Operations, id).Body);
         Assert.Equal("2026-10-09", saved.GetProperty("statusDate").GetString());
         payload["statusDate"] = "2026-10-07";
+        Assert.Equal(400, later.SaveCase(payload, Operations, id).Status);
+        payload["status"] = "Under Review by Operations";
         saved = Json(later.SaveCase(payload, Operations, id).Body);
         Assert.Equal("2026-10-07", saved.GetProperty("statusDate").GetString());
         payload["status"] = "On Hold";
@@ -227,12 +292,16 @@ public sealed class ApiTests : IDisposable
             payload["status"] = status;
             payload["statusDate"] = day;
         }
-        // Closed cases do not regress when a historical date is corrected.
+        // Recorded dates cannot be corrected even after closure.
         payload["formPreparedDate"] = "2026-07-03";
+        Assert.Equal(400, cases.SaveCase(payload, Operations, id).Status);
+        payload["formPreparedDate"] = "2026-07-02";
         Assert.Equal("Communication Sent - Case Closed", Json(cases.SaveCase(payload, Operations, id).Body).GetProperty("status").GetString());
         payload["status"] = "On Hold";
         payload["submittedDate"] = "2026-07-15";
         payload["autoStatus"] = true;
+        Assert.Equal(400, cases.SaveCase(payload, Operations, id).Status);
+        payload["submittedDate"] = "2026-07-09";
         Assert.Equal("On Hold", Json(cases.SaveCase(payload, Operations, id).Body).GetProperty("status").GetString());
         payload["status"] = "Under Review - Signed Form";
         payload["autoStatus"] = false;
@@ -578,6 +647,9 @@ public sealed class ApiTests : IDisposable
         payload["inwardDate"] = "2026-07-10";
         payload.Remove("accountOpeningDate");
         payload["stage1QueryRaisedDate"] = "2026-07-02";
+        Assert.Equal(400, service.SaveCase(payload, Operations).Status);
+        payload["inwardDate"] = "2026-07-01";
+        payload["resubmissionDate"] = "2026-07-10";
         Assert.Equal(201, service.SaveCase(payload, Operations).Status);
     }
 

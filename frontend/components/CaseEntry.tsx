@@ -107,7 +107,19 @@ export function CaseEntry({
       ...visibleDateFields(stage, form.channel, showAllDates),
       ...Object.keys(requiredFields).filter((field) => dateFields.includes(field)),
     ]),
-  ].filter((field) => field !== 'outwardDate' || showAllDates);
+  ].filter(
+    (field) =>
+      (field !== 'outwardDate' || showAllDates) &&
+      (form[field] ||
+        field in requiredFields ||
+        field === 'inwardDate' ||
+        (field === 'resubmissionDate' &&
+          [
+            'Resubmitted by CSE',
+            'Discrepancy Resolution Received',
+            'Resubmitted Form Received - Under Review',
+          ].includes(effectiveStatus))),
+  );
   const additionalDates = dateFields.slice(7).filter((name) => visibleDates.includes(name));
   const allowedStatuses = meta.statuses
     .filter((item) =>
@@ -231,6 +243,13 @@ export function CaseEntry({
     readOnly = false,
   ) {
     required ||= name in requiredFields;
+    readOnly ||=
+      type === 'date' &&
+      (name === 'statusDate'
+        ? editingId !== null &&
+          selected?.status === effectiveStatus &&
+          Boolean(selected?.statusDate)
+        : Boolean(selected?.[name]));
     const messages = errors.fields[name] || [];
     const accessibility = {
       id: `case-${name}`,
@@ -373,7 +392,7 @@ export function CaseEntry({
               {field('statusDate', 'Status business date', undefined, 'date')}
               <p className="report-note wide">
                 Status Business Date fills automatically when the status changes and follows its
-                process date. Edit it for a backdated event.
+                process date. Backdate it when recording a new status.
               </p>
               <div className="calculated-field">
                 <span>Current Stage</span>
@@ -434,7 +453,10 @@ export function CaseEntry({
                     />{' '}
                     Show all process dates
                   </span>
-                  <small>Also show the fields for other stages. Hidden values remain saved.</small>
+                  <small>
+                    Show recorded dates from other stages. Empty dates appear only for the selected
+                    action. Recorded dates are read-only.
+                  </small>
                 </label>
               )}
               {additionalDates.length > 0 && (

@@ -99,9 +99,34 @@ public sealed class CaseService(Database database, TimeProvider clock)
         }
 
         PreserveAdditionalFields(db, payload, entryId);
+        var savedDateErrors = new List<string>();
+        if (previous is not null && (entryId is not null || payload.Text("entryType") != "New"))
+        {
+            foreach (var field in DateFields.Concat(EntryFields.Dates.Keys).Where(field => field != "statusDate"))
+            {
+                var savedDate = previous.Text(field);
+                if (savedDate == "")
+                    continue;
+                if (!input.ContainsKey(field))
+                    payload[field] = savedDate;
+                else if (input.Text(field) == "" || payload.Text(field) != savedDate)
+                    savedDateErrors.Add($"{field} is a saved date and cannot be changed or cleared");
+            }
+        }
+        if (savedDateErrors.Count > 0)
+            return (400, new
+            {
+                errors = savedDateErrors
+            });
         StatusAutomation.Apply(payload, previous);
         SynchronizeSendingDates(payload);
         FillStatusBusinessDate(payload, previous, entryId, now);
+        if (entryId is not null && previous?.Text("statusDate") is { Length: > 0 } businessDate
+            && payload.Text("status") == previous.Text("status") && payload.Text("statusDate") != businessDate)
+            return (400, new
+            {
+                errors = new[] { "Status business date is saved and can only change for a new status" }
+            });
         accessErrors = CaseAccessPolicy.AccessErrors(payload, user, context);
         if (accessErrors.Count > 0)
             return (403, new

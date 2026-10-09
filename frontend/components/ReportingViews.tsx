@@ -21,12 +21,16 @@ export function Overview({
   filters,
   onFilter,
   mofslOnly = false,
+  onEdit,
+  editLabel = 'Edit',
 }: {
   report: Report | null;
   meta: Meta;
   filters: DateRange;
   onFilter: (range: DateRange) => void;
   mofslOnly?: boolean;
+  onEdit?: (referenceId: string) => void;
+  editLabel?: string;
 }) {
   const [dates, setDates] = useState(filters);
   return (
@@ -70,7 +74,15 @@ export function Overview({
           Clear
         </button>
       </div>
-      {report && <Dashboard report={report} meta={meta} mofslOnly={mofslOnly} />}
+      {report && (
+        <Dashboard
+          report={report}
+          meta={meta}
+          mofslOnly={mofslOnly}
+          onEdit={onEdit}
+          editLabel={editLabel}
+        />
+      )}
     </section>
   );
 }
@@ -356,10 +368,14 @@ export function Dashboard({
   report,
   meta,
   mofslOnly = false,
+  onEdit,
+  editLabel = 'Edit',
 }: {
   report: Report;
   meta: Meta;
   mofslOnly?: boolean;
+  onEdit?: (referenceId: string) => void;
+  editLabel?: string;
 }) {
   const s = report.summary;
   const kpis = [
@@ -452,6 +468,7 @@ export function Dashboard({
       <Panel title="Cases Requiring Attention">
         <Table
           headings={[
+            ...(onEdit ? ['Actions'] : []),
             'Reference',
             'Client',
             'Location',
@@ -465,6 +482,13 @@ export function Dashboard({
         >
           {attention.map((row) => (
             <tr key={Number(row.caseId)}>
+              {onEdit && (
+                <td className="case-actions">
+                  <button className="text-btn" onClick={() => onEdit(text(row.referenceId))}>
+                    {editLabel}
+                  </button>
+                </td>
+              )}
               <td>
                 <strong>{text(row.referenceId)}</strong>
               </td>

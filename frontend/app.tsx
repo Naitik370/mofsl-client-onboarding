@@ -187,6 +187,8 @@ function App() {
               filters={workspace.filters}
               onFilter={workspace.setFilters}
               mofslOnly={user.role === 'mofsl'}
+              onEdit={canWrite ? (reference) => navigate('entry', reference) : undefined}
+              editLabel={['cse', 'mofsl'].includes(user.role) ? 'Add update' : 'Edit'}
             />
           )}
           {view === 'analysis' && (

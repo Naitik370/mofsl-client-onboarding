@@ -69,6 +69,10 @@ Enter the channel-specific sending date once. The API copies it into a blank Out
 
 Selecting Form Found in Order - Ready for MOFSL Submission automatically sets the Stage 4 review outcome to Found in Order, including when the previous outcome was Still Pending.
 
+The entry form hides empty process dates unrelated to the selected action, including under Show all process dates. Required action dates and the applicable resubmission date remain available for entry. Show all process dates reveals recorded dates from other stages without exposing empty dates for unrelated actions. Recorded process dates, including the original inward date, are read-only. The API rejects changing or clearing them on edits and related updates and preserves omitted recorded dates. Status Business Date is read-only on same-status edits and remains available for a new status or related update.
+
+Cases Requiring Attention includes a direct Edit action for Admin/Operations and Add update for CSE/MOFSL. These actions open the latest entry by Reference ID; viewers retain a read-only table.
+
 Status Business Date defaults to the server date when a status is selected and follows changes to that status's process date. A manual business-date edit is preserved until another status is selected. When API callers omit it, the API uses a newly supplied matching process date, the original inward date for an initial receipt/review, or the server's local date. Same-status edits preserve the existing business date. Historical undated audit events still use their recorded date in reports.
 
 The six-stage status mappings, Reference ID generation, append-only history, query counting, FIFO query resolution, holiday exclusion, gross-TAT SLA comparison, and rejected/cancelled exclusions are retained. An admin can opt into filling a blank status-related date using the server date. React does not calculate MIS or replace this server date with the browser date.
