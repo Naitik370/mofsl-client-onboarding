@@ -50,6 +50,9 @@ These relative links open the standalone HTML documentation stored in this repos
 | `cse` | `CseDemo@123` | Assigned cases and CSE-side updates |
 | `mofsl` | `MofslDemo@123` | Stage 5/6 cases and MOFSL-side updates |
 | `viewer` | `ViewDemo@123` | Read-only register, audit, and MIS |
+| `sim.aditi` | `SimAditi@123` | CSE: Aditi Deshmukh (simulation user) |
+| `sim.rohit` | `SimRohit@123` | CSE: Rohit Kapoor (simulation user) |
+| `sim.priya` | `SimPriya@123` | CSE: Priya Menon (simulation user) |
 
 Demo credentials are for local use only. Replace them before a shared deployment.
 

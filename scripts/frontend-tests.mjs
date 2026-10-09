@@ -444,7 +444,6 @@ test('edit forms hide empty dates unrelated to the selected action', () => {
     'mofslQueryRaisedDate',
   ])
     assert(!html.includes(`name="${field}"`));
-  assert(html.includes('Empty dates appear only for the selected action'));
 });
 
 test('attention rows have direct edit actions only when writing is available', () => {
@@ -611,7 +610,6 @@ test('automatic status and stage override controls respect the user role', () =>
         onError: String,
       }),
     );
-    assert.match(html, /name="autoStatus"[^>]*checked=""/);
     assert.equal(html.includes('name="stageOverride"'), ['admin', 'operations'].includes(role));
     assert(html.includes('Current Stage'));
   }
@@ -766,10 +764,7 @@ test('entry form shows recorded dates for each master stage and the selected cha
         }),
       );
       assert(html.includes(`name="${expected}"`), `${stage} ${channel}: missing ${expected}`);
-      for (const [otherStage, otherField] of stages) {
-        if (otherStage !== stage) assert(!html.includes(`name="${otherField}"`));
-      }
-      assert(html.includes('Show all process dates'));
+      assert(!html.includes('Show all process dates'));
       if (stage === 'Stage 2') {
         assert.equal(html.includes('name="physicalFormSubmittedDate"'), channel === 'Physical');
         assert.equal(html.includes('name="digitalFormSentDate"'), channel === 'Digital');

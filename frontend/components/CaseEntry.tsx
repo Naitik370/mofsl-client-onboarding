@@ -74,7 +74,7 @@ export function CaseEntry({
     general: [],
   });
   const [busy, setBusy] = useState(false);
-  const [showAllDates, setShowAllDates] = useState(false);
+  const [revealAllDates, setShowAllDates] = useState(false);
   const [automaticBusinessDate, setAutomaticBusinessDate] = useState(true);
   const dirty = JSON.stringify(form) !== JSON.stringify(initialForm);
   useEffect(() => {
@@ -93,6 +93,7 @@ export function CaseEntry({
     selected && ['admin', 'operations'].includes(user.role) ? Number(selected.id) : null,
   );
   const referenceLocked = selected !== null;
+  const showAllDates = revealAllDates || referenceLocked || form.entryType !== 'New';
   const currentCase =
     cases.find((row) => text(row.referenceId).toLowerCase() === form.referenceId.toLowerCase()) ||
     selected;
@@ -428,37 +429,6 @@ export function CaseEntry({
               {(stage === 'Stage 1' || showAllDates) &&
                 field('stage1QueryDetails', 'Stage 1 query details')}
               {(stage === 'Stage 5' || showAllDates) && field('mofslQueryType', 'MOFSL query type')}
-              <label className="wide auto-date-control">
-                <span>
-                  <input
-                    type="checkbox"
-                    name="autoStatus"
-                    checked={form.autoStatus === 'true'}
-                    onChange={(event) => changeField('autoStatus', text(event.target.checked))}
-                  />{' '}
-                  Update status from newly entered process dates and review outcome
-                </span>
-                <small>
-                  Selecting a status manually turns this off. Queries and exceptions require a
-                  status selection.
-                </small>
-              </label>
-              {(referenceLocked || form.entryType !== 'New') && (
-                <label className="wide auto-date-control">
-                  <span>
-                    <input
-                      type="checkbox"
-                      checked={showAllDates}
-                      onChange={(event) => setShowAllDates(event.target.checked)}
-                    />{' '}
-                    Show all process dates
-                  </span>
-                  <small>
-                    Show recorded dates from other stages. Empty dates appear only for the selected
-                    action. Recorded dates are read-only.
-                  </small>
-                </label>
-              )}
               {additionalDates.length > 0 && (
                 <details className="wide process-fields" open>
                   <summary>{showAllDates ? 'All stage dates' : `${stage} dates`}</summary>
@@ -473,25 +443,6 @@ export function CaseEntry({
                 <p className="report-note wide">
                   The sending date also fills a blank Outward Date in the register.
                 </p>
-              )}
-              {user.role === 'admin' && (
-                <label className="wide auto-date-control">
-                  <span>
-                    <input
-                      name="autoCaptureDates"
-                      type="checkbox"
-                      checked={form.autoCaptureDates === 'true'}
-                      onChange={(event) =>
-                        changeField('autoCaptureDates', text(event.target.checked))
-                      }
-                    />{' '}
-                    Auto-capture related date
-                  </span>
-                  <small>
-                    The API fills the related blank date with the server date. Supplied dates are
-                    preserved.
-                  </small>
-                </label>
               )}
             </div>
             {selected && (

@@ -556,7 +556,7 @@ export const topics = [
     ],
     system: [
       'CaseEntry starts with defaults or a selected row. New process dates and Stage 4 outcomes infer status on save. Current Stage derives from populated fields; Admin/Operations can override it. CSE/MOFSL prepares a related update; Admin/Operations edits the selected entry.',
-      'Date fields follow the selected master stage and channel. Existing-case edits and related entries offer Show all process dates for corrections without clearing saved values.',
+      'Date fields follow the selected master stage and channel. Existing-case edits and related entries show recorded dates from every stage without clearing saved values.',
       'Frontend validation checks required fields, PAN, masters, dates, channel consistency, query details, and known related references.',
       'POST /api/cases creates an entry. PUT /api/cases/{id} updates an entry.',
     ],
